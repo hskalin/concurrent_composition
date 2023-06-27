@@ -182,6 +182,11 @@ class CompositionAgent(RaisimAgent):
 
         self.learn_steps = 0
 
+        # masks used for vectorizing functions
+        self.mask = torch.eye(self.n_heads, device="cuda:0").unsqueeze(dim=-1)
+        self.mask = self.mask.repeat(self.mini_batch_size, 1, self.n_heads)
+        self.mask = self.mask.ge(0.5)
+
     def explore(self, s, w):
         # [N, A] <-- [N, S], [N, H, A], [N, F]
         a = self.composition_fn(s, w, mode="explore")
@@ -396,7 +401,7 @@ class CompositionAgent(RaisimAgent):
         (s, f, a, _, s_next, dones) = batch
 
         curr_sf1, curr_sf2 = self.sf(s, a)  # [N, H, F] <-- [N, S], [N,A]
-        target_sf = self.calc_target_sf(f, s_next, dones)  # [N, H, F]
+        target_sf = self.calc_target_sf_vec(f, s_next, dones)  # [N, H, F]
 
         # importance sampling
         if self.importance_sampling:
@@ -431,7 +436,9 @@ class CompositionAgent(RaisimAgent):
 
         a_heads, entropies, _ = self.policy(s)  # [N,H,A], [N, H, 1] <-- [N,S]
 
-        qs = self.calc_qs_from_sf(s, a_heads)
+        # qs_slow = self.calc_qs_from_sf(s, a_heads)
+        qs = self.calc_qs_from_sf_vec(s, a_heads)
+
         qs = qs.unsqueeze(2)  # [N,H,1]
 
         loss = -qs - self.alpha * entropies
@@ -448,26 +455,34 @@ class CompositionAgent(RaisimAgent):
         entropy_loss = -torch.mean(loss)
         return entropy_loss
 
-    def calc_qs_from_sf(self, s, a):
-        qs = torch.stack(
-            [
-                self.calc_q_from_sf(s, a[:, i, :], self.pseudo_w[i], i)
-                for i in range(self.n_heads)
-            ],
-            1,
-        )
-        return qs  # [N,H]
+    def calc_qs_from_sf_vec(self, s, a):
+        s_tiled, a_tiled = pile_sa_pairs(s, a)
+        # [NHa, S], [NHa, A] <-- [N, S], [N, Ha, A]
 
-    def calc_q_from_sf(self, s, a, w, head_idx):
-        curr_sf1 = self.sf.SF1.forward_head(s, a, head_idx)  # [N, F] <-- [N, S], [N, A]
-        curr_sf2 = self.sf.SF2.forward_head(s, a, head_idx)  # [N, F] <-- [N, S], [N, A]
-        q1 = torch.einsum("ij,j->i", curr_sf1, w)  # [N]<-- [N,F]*[F]
-        q2 = torch.einsum("ij,j->i", curr_sf2, w)  # [N]<-- [N,F]*[F]
+        curr_sf1, curr_sf2 = self.sf(s_tiled, a_tiled)
+        # [NHa, Hsf, F] <-- [NHa, S], [NHa, A]
+
+        curr_sf1 = torch.masked_select(curr_sf1, self.mask).view(
+            self.mini_batch_size, self.n_heads, self.n_heads
+        )
+        # [N, Ha, F] <-- [NHa, Hsf, F]
+
+        curr_sf2 = torch.masked_select(curr_sf2, self.mask).view(
+            self.mini_batch_size, self.n_heads, self.n_heads
+        )
+        # [N, Ha, F] <-- [NHa, Hsf, F]
+
+        q1 = torch.einsum(
+            "ijk,kj->ij", curr_sf1, self.pseudo_w
+        )  # [N,H]<-- [N,H,F]*[F, H]
+        q2 = torch.einsum(
+            "ijk,kj->ij", curr_sf2, self.pseudo_w
+        )  # [N,H]<-- [N,H,F]*[F, H]
         if self.droprate > 0.0:
-            q = 0.5 * (q1 + q2)
+            qs = 0.5 * (q1 + q2)
         else:
-            q = torch.min(q1, q2)
-        return q
+            qs = torch.min(q1, q2)
+        return qs
 
     def calc_curr_sf(self, s, a):
         s_tiled, a_tiled = pile_sa_pairs(s, a)
@@ -479,24 +494,26 @@ class CompositionAgent(RaisimAgent):
         curr_sf = curr_sf.view(-1, self.n_heads, self.n_heads, self.feature_dim)
         return curr_sf  # [N, Ha, Hsf, F]
 
-    def calc_target_sf(self, f, s_next, dones):
+    def calc_target_sf_vec(self, f, s_next, dones):
         _, _, a_next = self.policy(s_next)  # [N, H, 1],[N, H, A] <-- [N, S]
 
         with torch.no_grad():
-            next_sf1 = torch.stack(
-                [
-                    self.sf_target.SF1.forward_head(s_next, a_next[:, i, :], i)
-                    for i in range(self.n_heads)
-                ],
-                1,
-            )  # [N,H,F]  <-- [N, S], [N, A]
-            next_sf2 = torch.stack(
-                [
-                    self.sf_target.SF2.forward_head(s_next, a_next[:, i, :], i)
-                    for i in range(self.n_heads)
-                ],
-                1,
-            )  # [N,H,F]  <-- [N, S], [N, A]
+            s_tiled, a_tiled = pile_sa_pairs(s_next, a_next)
+            # [NHa, S], [NHa, A] <-- [N, S], [N, Ha, A]
+
+            next_sf1, next_sf2 = self.sf_target(s_tiled, a_tiled)
+            # [NHa, Hsf, F] <-- [NHa, S], [NHa, A]
+
+            next_sf1 = torch.masked_select(next_sf1, self.mask).view(
+                self.mini_batch_size, self.n_heads, self.n_heads
+            )
+            # [N, Ha, F] <-- [NHa, Hsf, F]
+
+            next_sf2 = torch.masked_select(next_sf2, self.mask).view(
+                self.mini_batch_size, self.n_heads, self.n_heads
+            )
+            # [N, Ha, F] <-- [NHa, Hsf, F]
+
             next_sf = torch.min(next_sf1, next_sf2)  # [N, H, F]
 
         f = torch.tile(f[:, None, :], (self.n_heads, 1))  # [N,H,F] <-- [N,F]
@@ -511,7 +528,7 @@ class CompositionAgent(RaisimAgent):
 
         with torch.no_grad():
             curr_sf1, curr_sf2 = self.sf(s, a)
-        target_sf = self.calc_target_sf(f, s_next, dones)
+        target_sf = self.calc_target_sf_vec(f, s_next, dones)
         error = torch.mean(torch.abs(curr_sf1 - target_sf), (1, 2))
         return error.unsqueeze(1).cpu().numpy()
 
@@ -548,7 +565,7 @@ if __name__ == "__main__":
     from common.util import fix_config
 
     default_cfg = CompositionAgent.default_config()
-    wandb.init(config=default_cfg)
+    wandb.init(mode="disabled", config=default_cfg)
     cfg = fix_config(wandb.config)
     pprint.pprint(cfg)
 

@@ -273,8 +273,8 @@ class RaisimAgent(AbstractAgent):
 
     def update_w(self, s, w, w_navi, w_hover, thr=2):
         dist = torch.linalg.norm(s[:, 0:3], axis=1)
-        w[torch.where(dist <= thr)[0], :] = w_hover.long()
-        w[torch.where(dist > thr)[0], :] = w_navi.long()
+        w[torch.where(dist <= thr)[0], :] = w_hover
+        w[torch.where(dist > thr)[0], :] = w_navi
 
     def is_update(self):
         return (
