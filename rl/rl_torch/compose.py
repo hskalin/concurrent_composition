@@ -572,8 +572,3 @@ if __name__ == "__main__":
     agent = CompositionAgent(cfg)
     agent.run()
     wandb.finish()
-
-    # pprint.pprint(default_cfg)
-
-    # agent = CompositionAgent(default_cfg)
-    # agent.run()
