@@ -1,19 +1,19 @@
+import isaacgym
 from pathlib import Path
 
 import functorch
-import numpy as np
 import torch
 import wandb
-from rl.rl_torch.common.agent import RaisimAgent
-from rl.rl_torch.common.policy import MultiheadGaussianPolicy
-from rl.rl_torch.common.util import (
+from common.agent import RaisimAgent
+from common.policy import MultiheadGaussianPolicy
+from common.util import (
     grad_false,
     hard_update,
     pile_sa_pairs,
     soft_update,
     update_params,
 )
-from rl.rl_torch.common.value_function import TwinnedMultiheadSFNetwork
+from common.value_function import TwinnedMultiheadSFNetwork
 from torch.distributions import Normal
 from torch.optim import Adam
 
@@ -30,9 +30,9 @@ class CompositionAgent(RaisimAgent):
 
         env_cfg.update(
             dict(
-                env_name="pointmass3d",  # pointmassXd[,_simple,_augment]
-                num_envs=int(200),
-                episode_max_step=int(200),
+                env_name="isaacpointmass_simple",  # pointmassXd[,_simple,_augment]
+                num_envs=int(512),
+                episode_max_step=int(500),
                 eval_interval=10,
                 total_episodes=int(10),
                 random_robot_state=True,
@@ -46,7 +46,7 @@ class CompositionAgent(RaisimAgent):
         agent_cfg.update(
             dict(
                 # record folder name, options: [sfgpi, msf, sfcpi, dac, dacgpi, pickplace]
-                name="sfgpi",
+                name="dac",
                 importance_sampling=True,
                 is_clip_max=1.0,
                 entropy_tuning=True,
@@ -154,14 +154,12 @@ class CompositionAgent(RaisimAgent):
 
         self.sf1_optimizer = Adam(self.sf.SF1.parameters(), lr=self.lr)
         self.sf2_optimizer = Adam(self.sf.SF2.parameters(), lr=self.lr)
-        self.policy_optimizer = Adam(
-            self.policy.parameters(), lr=self.policy_lr)
+        self.policy_optimizer = Adam(self.policy.parameters(), lr=self.policy_lr)
 
         if self.entropy_tuning:
             self.alpha_lr = self.agent_cfg["alpha_lr"]
             self.target_entropy = (
-                -torch.prod(torch.tensor(self.action_shape,
-                            device=self.device))
+                -torch.prod(torch.tensor(self.action_shape, device=self.device))
                 .tile(self.n_heads)
                 .unsqueeze(1)
             )  # -|A|, [H,1]
@@ -174,8 +172,7 @@ class CompositionAgent(RaisimAgent):
         else:
             self.alpha = torch.tensor(self.agent_cfg["alpha"]).to(self.device)
 
-        self.pseudo_w = torch.eye(self.feature_dim).to(
-            self.device)  # base tasks
+        self.pseudo_w = torch.eye(self.feature_dim).to(self.device)  # base tasks
         self.prev_impact = torch.zeros((self.n_env, self.n_heads, self.action_dim)).to(
             self.device
         )
@@ -229,8 +226,7 @@ class CompositionAgent(RaisimAgent):
     def dac(self, s, w, mode):
         means, log_stds = self.policy.get_mean_std(s)  # [N, H, A]
         kappa = self.cpe(s, means, w)
-        composed_mean, composed_std = self.cpi(
-            means, log_stds, kappa, rule="mca")
+        composed_mean, composed_std = self.cpi(means, log_stds, kappa, rule="mca")
         if mode == "explore":
             a = torch.tanh(Normal(composed_mean, composed_std).rsample())
         elif mode == "exploit":
@@ -267,10 +263,8 @@ class CompositionAgent(RaisimAgent):
     def gpi(self, acts, value, rule="q"):
         if rule == "q":
             value_flat = value.flatten(1)  # [N, HH] <-- [N, H, Ha]
-            idx = torch.div(value_flat.argmax(
-                1), self.n_heads, rounding_mode="floor")
-            idx = idx[:, None].repeat(
-                1, self.action_dim).unsqueeze(1)  # [N,1,A]<-[N]
+            idx = torch.div(value_flat.argmax(1), self.n_heads, rounding_mode="floor")
+            idx = idx[:, None].repeat(1, self.action_dim).unsqueeze(1)  # [N,1,A]<-[N]
         elif rule == "k":
             idx = value.argmax(1).unsqueeze(1)  # [N, 1, A] <-- [N, H, A]
         a = torch.gather(acts, 1, idx).squeeze(1)  # [N, A] <-- [N, H, A]
@@ -295,13 +289,11 @@ class CompositionAgent(RaisimAgent):
             w_div_std = torch.einsum("ij, ijk->ijk", gating, (-log_stds).exp())
         elif rule == "mca":
             # [N, H, A] <-- [N,F,H], [N,H,A], F=H
-            w_div_std = torch.einsum(
-                "ijk, ijk->ijk", gating, (-log_stds).exp())
+            w_div_std = torch.einsum("ijk, ijk->ijk", gating, (-log_stds).exp())
 
         composed_std = 1 / (w_div_std.sum(1) + Epsilon)  # [N,A]
         # [N,A]<--[N,A]*[N,A]<-- [N,H,A], [N,H,A]
-        composed_mean = composed_std * \
-            torch.einsum("ijk,ijk->ik", means, w_div_std)
+        composed_mean = composed_std * torch.einsum("ijk,ijk->ik", means, w_div_std)
         return composed_mean, composed_std
 
     def scale_gating(self, gating):
@@ -316,11 +308,12 @@ class CompositionAgent(RaisimAgent):
         s, a = pile_sa_pairs(s, a)
 
         self.sf = self.sf.eval()
-        def func(s, a): return torch.min(*self.sf(s, a))  # [NHa, Hsf, F]
-        j = functorch.vmap(functorch.jacrev(
-            func, argnums=1))(s, a)  # [NHa,Hsf,F,A]
-        j = j.view(-1, self.n_heads, self.n_heads,
-                   self.feature_dim, self.action_dim)
+
+        def func(s, a):
+            return torch.min(*self.sf(s, a))  # [NHa, Hsf, F]
+
+        j = functorch.vmap(functorch.jacrev(func, argnums=1))(s, a)  # [NHa,Hsf,F,A]
+        j = j.view(-1, self.n_heads, self.n_heads, self.feature_dim, self.action_dim)
         cur_impact = j.mean((1, 2)).abs()  # [N,F,A]<-[N,Ha,Hsf,F,A]
         self.sf = self.sf.train()
 
@@ -352,20 +345,16 @@ class CompositionAgent(RaisimAgent):
             )
         else:
             batch = self.replay_buffer.sample(self.mini_batch_size)
-            priority_weights = torch.ones(
-                (self.mini_batch_size, 1)).to(self.device)
+            priority_weights = torch.ones((self.mini_batch_size, 1)).to(self.device)
 
         sf1_loss, sf2_loss, errors, mean_sf1, mean_sf2, target_sf = self.calc_sf_loss(
             batch, priority_weights
         )
         policy_loss, entropies = self.calc_policy_loss(batch, priority_weights)
 
-        update_params(self.policy_optimizer, self.policy,
-                      policy_loss, self.grad_clip)
-        update_params(self.sf1_optimizer, self.sf.SF1,
-                      sf1_loss, self.grad_clip)
-        update_params(self.sf2_optimizer, self.sf.SF2,
-                      sf2_loss, self.grad_clip)
+        update_params(self.policy_optimizer, self.policy, policy_loss, self.grad_clip)
+        update_params(self.sf1_optimizer, self.sf.SF1, sf1_loss, self.grad_clip)
+        update_params(self.sf2_optimizer, self.sf.SF2, sf2_loss, self.grad_clip)
 
         if self.entropy_tuning:
             entropy_loss = self.calc_entropy_loss(entropies, priority_weights)
@@ -373,8 +362,7 @@ class CompositionAgent(RaisimAgent):
             self.alpha = self.log_alpha.exp()
 
         if self.per:
-            self.replay_buffer.update_priority(
-                indices, errors.detach().cpu().numpy())
+            self.replay_buffer.update_priority(indices, errors.detach().cpu().numpy())
 
         if self.learn_steps % self.log_interval == 0:
             metrics = {
@@ -412,8 +400,7 @@ class CompositionAgent(RaisimAgent):
 
         # importance sampling
         if self.importance_sampling:
-            ratio = self.calc_importance_ratio(
-                s, self.is_clip_range)  # [N, H, F]
+            ratio = self.calc_importance_ratio(s, self.is_clip_range)  # [N, H, F]
         else:
             ratio = torch.ones_like(target_sf)
 
@@ -472,10 +459,8 @@ class CompositionAgent(RaisimAgent):
         return qs  # [N,H]
 
     def calc_q_from_sf(self, s, a, w, head_idx):
-        curr_sf1 = self.sf.SF1.forward_head(
-            s, a, head_idx)  # [N, F] <-- [N, S], [N, A]
-        curr_sf2 = self.sf.SF2.forward_head(
-            s, a, head_idx)  # [N, F] <-- [N, S], [N, A]
+        curr_sf1 = self.sf.SF1.forward_head(s, a, head_idx)  # [N, F] <-- [N, S], [N, A]
+        curr_sf2 = self.sf.SF2.forward_head(s, a, head_idx)  # [N, F] <-- [N, S], [N, A]
         q1 = torch.einsum("ij,j->i", curr_sf1, w)  # [N]<-- [N,F]*[F]
         q2 = torch.einsum("ij,j->i", curr_sf2, w)  # [N]<-- [N,F]*[F]
         if self.droprate > 0.0:
@@ -491,8 +476,7 @@ class CompositionAgent(RaisimAgent):
         curr_sf1, curr_sf2 = self.sf(s_tiled, a_tiled)
         # [NHa, Hsf, F] <-- [NHa, S], [NHa, A]
         curr_sf = torch.min(curr_sf1, curr_sf2)
-        curr_sf = curr_sf.view(-1, self.n_heads,
-                               self.n_heads, self.feature_dim)
+        curr_sf = curr_sf.view(-1, self.n_heads, self.n_heads, self.feature_dim)
         return curr_sf  # [N, Ha, Hsf, F]
 
     def calc_target_sf(self, f, s_next, dones):
@@ -561,7 +545,7 @@ class CompositionAgent(RaisimAgent):
 if __name__ == "__main__":
     import pprint
 
-    from rl.rl_torch.common.util import fix_config
+    from common.util import fix_config
 
     default_cfg = CompositionAgent.default_config()
     wandb.init(config=default_cfg)
@@ -571,3 +555,8 @@ if __name__ == "__main__":
     agent = CompositionAgent(cfg)
     agent.run()
     wandb.finish()
+
+    # pprint.pprint(default_cfg)
+
+    # agent = CompositionAgent(default_cfg)
+    # agent.run()

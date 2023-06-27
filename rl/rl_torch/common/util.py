@@ -127,10 +127,10 @@ def check_obs(obs, obs_dim):
 
 
 def check_act(action, action_dim, type=np.float32):
-    action = ts2np(action)
-    n_samples = check_samples(action)
-    action = action.reshape(n_samples, action_dim).astype(type)
-    return np.clip(action, -1, 1)
+    # action = ts2np(action)
+    # n_samples = check_samples(action)
+    # action = action.reshape(n_samples, action_dim).astype(type)
+    return torch.clamp(action, min=-1, max=1)
 
 
 def to_batch(

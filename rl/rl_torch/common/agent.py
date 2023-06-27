@@ -3,20 +3,21 @@ import time
 import warnings
 from pathlib import Path
 
-import numpy as np
 import torch
-from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
+
+# from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
+from env.pointMass import PointMass
 from ruamel.yaml import RoundTripDumper, dump
 
 import wandb
-from rl.rl_torch.common.helper import Visualizer
-from rl.rl_torch.common.replay_buffer import (
+from common.helper import Visualizer
+from common.replay_buffer import (
     MyMultiStepMemory,
     MyPrioritizedMemory,
 )
 import os
-from rl.rl_torch.common.feature import pm_feature, quadcopter_feature
-from rl.rl_torch.common.util import (
+from common.feature import pm_feature, quadcopter_feature
+from common.util import (
     check_obs,
     check_act,
     dump_cfg,
@@ -46,7 +47,6 @@ class AbstractAgent:
         self.device = device
 
         torch.manual_seed(seed)
-        np.random.seed(seed)
 
         torch.autograd.set_detect_anomaly(torch_api)  # detect NaN
         torch.autograd.profiler.profile(torch_api)
@@ -67,8 +67,8 @@ class RaisimAgent(AbstractAgent):
     def default_config(cls):
         env_cfg = dict(
             env_name="pointmass1d",
-            num_envs=100,
-            episode_max_step=200,
+            num_envs=512,
+            episode_max_step=500,
             total_episodes=int(100),
             random_robot_state=True,
             random_target_state=True,
@@ -77,7 +77,7 @@ class RaisimAgent(AbstractAgent):
             num_threads=10,
             reward={"success": {"coeff": 1}},
             success_threshold=[1, 1, 1, 1],  # pos[m], vel[m/s], ang[rad], angvel[rad/s]
-            single_task=False,  # overwrite all task_weight to nav_w
+            single_task=True,  # overwrite all task_weight to nav_w
             seed=123,
             log_interval=5,
             eval=True,
@@ -148,13 +148,8 @@ class RaisimAgent(AbstractAgent):
             task_weight=self.task_weight,
             success_threshold=self.success_threshold,
         )
-        env, w, feature = self.env_spec.get_env_w_feature()
-        self.env = VecEnv(
-            env.RaisimGymEnv(
-                self.env_cfg["rsc_path"], dump(self.env_cfg, Dumper=RoundTripDumper)
-            ),
-            self.env_cfg,
-        )
+
+        self.env, w, feature = self.env_spec.get_env_w_feature()
 
         self.n_env = self.env_cfg["num_envs"]
         self.episode_max_step = self.env_cfg["episode_max_step"]
@@ -172,18 +167,18 @@ class RaisimAgent(AbstractAgent):
         w_train, w_eval = w[0], w[1]  # [F]
         self.w_navi, self.w_hover = w_train[0], w_train[1]  # [F]
         self.w_eval_navi, self.w_eval_hover = w_eval[0], w_eval[1]  # [F]
-        self.w_init = np.tile(self.w_navi, (self.n_env, 1))  # [N, F]
-        self.w_eval_init = np.tile(self.w_eval_navi, (self.n_env, 1))  # [N, F]
-        self.w = self.w_init.copy()  # [N, F]
-        self.w_eval = self.w_eval_init.copy()  # [N, F]
+        self.w_init = torch.tile(self.w_navi, (self.n_env, 1))  # [N, F]
+        self.w_eval_init = torch.tile(self.w_eval_navi, (self.n_env, 1))  # [N, F]
+        self.w = self.w_init.clone().type(torch.float32)  # [N, F]
+        self.w_eval = self.w_eval_init.clone().type(torch.float32)  # [N, F]
 
         self.feature = feature
         self.observation_dim = self.env.num_obs
         self.feature_dim = self.feature.dim
-        self.action_dim = self.env.num_acts
-        self.observation_shape = np.array([self.observation_dim])
-        self.feature_shape = np.array([self.feature_dim])
-        self.action_shape = np.array([self.action_dim])
+        self.action_dim = self.env.num_act
+        self.observation_shape = [self.observation_dim]
+        self.feature_shape = [self.feature_dim]
+        self.action_shape = [self.action_dim]
 
         self.per = self.buffer_cfg["prioritize_replay"]
         memory = MyPrioritizedMemory if self.per else MyMultiStepMemory
@@ -201,7 +196,7 @@ class RaisimAgent(AbstractAgent):
         self.updates_per_step = int(self.agent_cfg["updates_per_step"])
         self.reward_scale = int(self.agent_cfg["reward_scale"])
 
-        log_dir = self.agent_cfg["name"] + "/" + env.__name__ + "/" + exp_date + "/"
+        log_dir = self.agent_cfg["name"] + "/" + "pointmass" + "/" + exp_date + "/"
         self.log_path = self.env_cfg["log_path"] + log_dir
         if self.record:
             Path(self.log_path).mkdir(parents=True, exist_ok=True)
@@ -236,8 +231,22 @@ class RaisimAgent(AbstractAgent):
         s = self.reset_env()
         for _ in range(self.episode_max_step):
             a = self.act(s)
-            _, done = self.env.step(a)
-            s_next = self.env.observe(update_statistics=False)
+            # _, done = self.env.step(a)
+
+            self.env.step(a)
+            done = self.env.reset_buf.clone()
+
+            episodeRet = self.env.return_buf.clone()
+
+            # s_next = self.env.observe(update_statistics=False)
+            s_next = self.env.obs_buf.clone()
+            self.env.reset()
+
+            done_ids = done.nonzero(as_tuple=False).squeeze(-1)
+            if done_ids.size()[0]:
+                episodic_return = torch.mean(episodeRet[done_ids].float()).item()
+                print(f"episodic_return={episodic_return}")
+
             r = self.calc_reward(s_next, self.w)
             masked_done = False if episode_steps >= self.episode_max_step else done
             self.save_to_buffer(s, a, r, s_next, done, masked_done)
@@ -256,16 +265,16 @@ class RaisimAgent(AbstractAgent):
             if episode_steps >= self.episode_max_step:
                 break
 
-        if self.episodes % self.log_interval == 0:
-            wandb.log({"reward/train": np.mean(episode_r)})
+        # if self.episodes % self.log_interval == 0:
+        wandb.log({"reward/train": torch.mean(episode_r).item()})
 
         if self.eval and (self.episodes % self.eval_interval == 0):
             self.evaluate()
 
     def update_w(self, s, w, w_navi, w_hover, thr=2):
-        dist = np.linalg.norm(s[:, 0:3], axis=1)
-        w[np.where(dist <= thr), :] = w_hover
-        w[np.where(dist > thr), :] = w_navi
+        dist = torch.linalg.norm(s[:, 0:3], axis=1)
+        w[torch.where(dist <= thr)[0], :] = w_hover.long()
+        w[torch.where(dist > thr)[0], :] = w_navi.long()
 
     def is_update(self):
         return (
@@ -274,12 +283,13 @@ class RaisimAgent(AbstractAgent):
         )
 
     def reset_env(self):
-        s = self.env.reset()
+        # s = self.env.reset()
+        s = self.env.obs_buf.clone()
         if s is None:
-            s = np.zeros((self.n_env, self.env.num_obs))
+            s = torch.zeros((self.n_env, self.env.num_obs))
 
-        self.w = self.w_init.copy()
-        self.w_eval = self.w_eval_init.copy()
+        self.w = self.w_init.clone()
+        self.w_eval = self.w_eval_init.clone()
         return s
 
     def save_to_buffer(self, s, a, r, s_next, done, masked_done):
@@ -305,16 +315,18 @@ class RaisimAgent(AbstractAgent):
         print(f"===== evaluate at episode: {self.episodes} ====")
         self.visualizer.turn_on(self.episodes)
 
-        returns = np.zeros((episodes,), dtype=np.float32)
+        returns = torch.zeros((episodes,), dtype=torch.float32)
         for i in range(episodes):
             episode_r = 0.0
 
             s = self.reset_env()
             for _ in range(self.episode_max_step):
-
                 a = self.act(s, "exploit")
-                _, _ = self.env.step(a)
-                s_next = self.env.observe(update_statistics=False)
+                self.env.step(a)
+                # s_next = self.env.observe(update_statistics=False)
+                s_next = self.env.obs_buf.clone()
+                self.env.reset()
+
                 r = self.calc_reward(s_next, self.w_eval)
 
                 s = s_next
@@ -324,18 +336,18 @@ class RaisimAgent(AbstractAgent):
                 if self.render:
                     time.sleep(0.04)
 
-            returns[i] = np.mean(episode_r)
+            returns[i] = torch.mean(episode_r).item()
 
         print(f"===== finish evaluate ====")
         self.visualizer.turn_off()
-        wandb.log({"reward/eval": np.mean(returns)})
+        wandb.log({"reward/eval": torch.mean(returns).item()})
 
         if self.save_model:
             self.save_torch_model()
 
     def act(self, s, mode="explore"):
         if self.steps <= self.min_n_experience:
-            a = 2 * np.random.random((self.n_env, self.env.num_acts)) - 1
+            a = 2 * torch.rand((self.n_env, self.env.num_act), device="cuda:0") - 1
         else:
             a = self.get_action(s, mode)
 
@@ -351,13 +363,11 @@ class RaisimAgent(AbstractAgent):
                 a = self.explore(s, w)
             elif mode == "exploit":
                 a = self.exploit(s, w)
-
-        a = ts2np(a)
         return a
 
     def calc_reward(self, s, w):
         f = self.feature.extract(s)
-        r = np.sum(w * f, 1)
+        r = torch.sum(w * f, 1)
         return r
 
     def explore(self):
@@ -401,22 +411,34 @@ class raisim_multitask_env:
         return env, task_w, feature
 
     def select_env(self, env_name):
-        if "pointmass1d" in env_name:
-            from raisimGymTorch.env.bin import pointmass1d
+        # if "pointmass1d" in env_name:
+        #     from raisimGymTorch.env.bin import pointmass1d
 
-            env = pointmass1d
-        elif "pointmass2d" in env_name:
-            from raisimGymTorch.env.bin import pointmass2d
+        #     env = pointmass1d
+        # elif "pointmass2d" in env_name:
+        #     from raisimGymTorch.env.bin import pointmass2d
 
-            env = pointmass2d
-        elif "pointmass3d" in env_name:
-            from raisimGymTorch.env.bin import pointmass3d
+        #     env = pointmass2d
+        # elif "pointmass3d" in env_name:
+        #     from raisimGymTorch.env.bin import pointmass3d
 
-            env = pointmass3d
-        elif "quadcopter" in env_name:
-            from raisimGymTorch.env.bin import quadcopter_task0
+        #     env = pointmass3d
+        # elif "quadcopter" in env_name:
+        #     from raisimGymTorch.env.bin import quadcopter_task0
 
-            env = quadcopter_task0
+        #     env = quadcopter_task0
+        if "isaacpointmass" in env_name:
+
+            class pconfig:
+                def __init__(self) -> None:
+                    self.num_envs = 512
+                    self.sim_device = "cuda:0"
+                    self.headless = False
+                    self.compute_device_id = 0
+                    self.graphics_device_id = 0
+
+            args = pconfig()
+            env = PointMass(args)
         else:
             raise NotImplementedError(
                 "select one Raisim Env: pointmassXd, quadcopter_taskX"
@@ -471,6 +493,11 @@ class raisim_multitask_env:
             w_hov = get_w(combination, 3, self.hov_w)
             w_nav_eval = get_w(combination, 3, self.nav_w_eval)
             w_hov_eval = get_w(combination, 3, self.hov_w_eval)
+        elif "isaacpointmass" in env_name:
+            w_nav = get_w(combination, 3, self.nav_w)
+            w_hov = get_w(combination, 3, self.hov_w)
+            w_nav_eval = get_w(combination, 3, self.nav_w_eval)
+            w_hov_eval = get_w(combination, 3, self.hov_w_eval)
 
         if "quadcopter" in env_name:
             w_nav = get_w(combination, 3, self.nav_w)
@@ -478,6 +505,12 @@ class raisim_multitask_env:
             w_nav_eval = get_w(combination, 3, self.nav_w_eval)
             w_hov_eval = get_w(combination, 3, self.hov_w_eval)
 
-        tasks_train = (np.array(w_nav), np.array(w_hov))
-        tasks_eval = (np.array(w_nav_eval), np.array(w_hov_eval))
+        tasks_train = (
+            torch.tensor(w_nav, device="cuda:0"),
+            torch.tensor(w_hov, device="cuda:0"),
+        )
+        tasks_eval = (
+            torch.tensor(w_nav_eval, device="cuda:0"),
+            torch.tensor(w_hov_eval, device="cuda:0"),
+        )
         return (tasks_train, tasks_eval)

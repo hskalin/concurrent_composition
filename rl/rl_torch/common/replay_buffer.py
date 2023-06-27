@@ -1,5 +1,6 @@
 from collections import deque
-import numpy as np
+
+# import numpy as np
 import torch
 from torch.utils.data.sampler import WeightedRandomSampler
 
@@ -10,9 +11,9 @@ class Memory:
         self.state_shape = state_shape
         self.feature_shape = feature_shape
         self.action_shape = action_shape
-        self.device = device
+        self.device = "cuda:0"
         self.is_image = len(state_shape) == 3
-        self.state_type = np.uint8 if self.is_image else np.float32
+        self.state_type = torch.uint8 if self.is_image else torch.float32
 
         self.reset()
 
@@ -25,13 +26,13 @@ class Memory:
         self._append((state, feature, action, reward, next_state, done))
 
     def process_before_store(self, state, feature, next_state):
-        state = np.array(state, dtype=np.float32)
-        feature = np.array(feature, dtype=np.float32)
-        next_state = np.array(next_state, dtype=np.float32)
+        state = torch.tensor(state, dtype=torch.float32, device="cuda:0")
+        feature = torch.tensor(feature, dtype=torch.float32, device="cuda:0")
+        next_state = torch.tensor(next_state, dtype=torch.float32, device="cuda:0")
 
         if self.is_image:
-            state = (state * 255).astype(np.uint8)
-            next_state = (next_state * 255).astype(np.uint8)
+            state = (state * 255).astype(torch.uint8)
+            next_state = (next_state * 255).astype(torch.uint8)
         return state, feature, next_state
 
     def _append(self, batch):
@@ -48,25 +49,32 @@ class Memory:
         self._p = (self._p + n_sample) % self.capacity
 
     def sample(self, batch_size):
-        indices = np.random.randint(low=0, high=self._n, size=batch_size)
+        indices = torch.randint(low=0, high=self._n, size=(batch_size,))
         return self._sample(indices)
 
     def _sample(self, indices):
         if self.is_image:
-            states = self.states[indices].astype(np.float32) / 255.0
-            next_states = self.next_states[indices].astype(np.float32) / 255.0
+            states = self.states[indices].astype(torch.float32) / 255.0
+            next_states = self.next_states[indices].astype(torch.float32) / 255.0
         else:
             states = self.states[indices]
             next_states = self.next_states[indices]
 
-        states = torch.FloatTensor(states).to(self.device)
-        features = torch.FloatTensor(self.features[indices]).to(self.device)
-        actions = torch.FloatTensor(self.actions[indices]).to(self.device)
-        rewards = torch.FloatTensor(self.rewards[indices]).to(self.device)
-        next_states = torch.FloatTensor(next_states).to(self.device)
-        dones = torch.FloatTensor(self.dones[indices]).to(self.device)
+        # states = torch.FloatTensor(states).to(self.device)
+        # features = torch.FloatTensor(self.features[indices]).to(self.device)
+        # actions = torch.FloatTensor(self.actions[indices]).to(self.device)
+        # rewards = torch.FloatTensor(self.rewards[indices]).to(self.device)
+        # next_states = torch.FloatTensor(next_states).to(self.device)
+        # dones = torch.FloatTensor(self.dones[indices]).to(self.device)
 
-        return states, features, actions, rewards, next_states, dones
+        return (
+            states,
+            self.features[indices],
+            self.actions[indices],
+            self.rewards[indices],
+            next_states,
+            self.dones[indices],
+        )
 
     def __len__(self):
         return self._n
@@ -75,16 +83,24 @@ class Memory:
         self._n = 0
         self._p = 0
 
-        self.states = np.zeros(
-            (self.capacity, *self.state_shape), dtype=self.state_type
+        self.states = torch.zeros(
+            (self.capacity, *self.state_shape), dtype=self.state_type, device="cuda:0"
         )
-        self.features = np.zeros((self.capacity, *self.feature_shape), dtype=np.float32)
-        self.actions = np.zeros((self.capacity, *self.action_shape), dtype=np.float32)
-        self.rewards = np.zeros((self.capacity, 1), dtype=np.float32)
-        self.next_states = np.zeros(
-            (self.capacity, *self.state_shape), dtype=self.state_type
+        self.features = torch.zeros(
+            (self.capacity, *self.feature_shape), dtype=torch.float32, device="cuda:0"
         )
-        self.dones = np.zeros((self.capacity, 1), dtype=np.float32)
+        self.actions = torch.zeros(
+            (self.capacity, *self.action_shape), dtype=torch.float32, device="cuda:0"
+        )
+        self.rewards = torch.zeros(
+            (self.capacity, 1), dtype=torch.float32, device="cuda:0"
+        )
+        self.next_states = torch.zeros(
+            (self.capacity, *self.state_shape), dtype=self.state_type, device="cuda:0"
+        )
+        self.dones = torch.zeros(
+            (self.capacity, 1), dtype=torch.float32, device="cuda:0"
+        )
 
     def get(self):
         valid = slice(0, self._n)
@@ -150,25 +166,34 @@ class MyMultiStepBuff:
         return state, feature, action, reward
 
     def _pop(self, name):
-        return np.array([self.memory[name][i].popleft() for i in range(self.n_env)])
+        return torch.stack(
+            [self.memory[name][i].popleft() for i in range(self.n_env)], dim=0
+        )
 
     def _multi_step_reward(self, gamma):
-        return np.array(
+        return torch.tensor(
             [
-                np.sum(
-                    [r * (gamma**i) for i, r in enumerate(self.memory["reward"][j])]
+                torch.sum(
+                    torch.tensor(
+                        [
+                            r * (gamma**i)
+                            for i, r in enumerate(self.memory["reward"][j])
+                        ],
+                        device="cuda:0",
+                    )
                 )
                 for j in range(self.n_env)
-            ]
+            ],
+            device="cuda:0",
         )[:, None]
 
     def _multi_step_feature(self, gamma):
-        return np.array(
+        return torch.stack(
             [
-                np.sum(
+                torch.stack(
                     [f * (gamma**i) for i, f in enumerate(self.memory["feature"][j])],
-                    0,
-                )
+                    dim=0,
+                ).sum(dim=0)
                 for j in range(self.n_env)
             ]
         )
@@ -224,7 +249,9 @@ class MyMultiStepMemory(Memory):
                 state, feature, action, reward = self.buff.get(self.gamma)
                 self._append((state, feature, action, reward, next_state, done))
 
-            indices = np.where(np.squeeze((episode_done == True) | (done == True)))[0]
+            indices = torch.where(
+                torch.squeeze((episode_done == True) | (done == True))
+            )[0]
             if indices.size != 0:
                 self.buff.reset_by_indice(indices)
         else:
@@ -248,7 +275,6 @@ class MyPrioritizedMemory(MyMultiStepMemory):
         epsilon=1e-4,
         **kwargs,
     ):
-
         super().__init__(
             capacity,
             state_shape,
@@ -289,7 +315,9 @@ class MyPrioritizedMemory(MyMultiStepMemory):
                     (state, feature, action, reward, next_state, done, priorities)
                 )
 
-            indices = np.where(np.squeeze((episode_done == True) | (done == True)))[0]
+            indices = torch.where(
+                torch.squeeze((episode_done == True) | (done == True))
+            )[0]
             if indices.size != 0:
                 self.buff.reset_by_indice(indices)
         else:
@@ -297,10 +325,10 @@ class MyPrioritizedMemory(MyMultiStepMemory):
             self._append((state, feature, action, reward, next_state, done, priorities))
 
     def update_priority(self, indices, errors):
-        self.priorities[indices] = np.reshape(self.calc_priority(errors), (-1, 1))
+        self.priorities[indices] = torch.reshape(self.calc_priority(errors), (-1, 1))
 
     def calc_priority(self, error):
-        return (np.abs(error) + self.epsilon) ** self.alpha
+        return (torch.abs(error) + self.epsilon) ** self.alpha
 
     def sample(self, batch_size):
         self.beta = min(1.0 - self.epsilon, self.beta + self.beta_annealing)
@@ -308,16 +336,16 @@ class MyPrioritizedMemory(MyMultiStepMemory):
         indices = list(sampler)
         batch = self._sample(indices)
 
-        p = self.priorities[indices] / np.sum(self.priorities[: self._n])
+        p = self.priorities[indices] / torch.sum(self.priorities[: self._n])
         weights = (self._n * p) ** -self.beta
-        weights /= np.max(weights)
+        weights /= torch.max(weights)
         weights = torch.FloatTensor(weights).to(self.device)
 
         return batch, indices, weights
 
     def reset(self):
         super().reset()
-        self.priorities = np.empty((self.capacity, 1), dtype=np.float32)
+        self.priorities = torch.empty((self.capacity, 1), dtype=torch.float32)
 
     def get(self):
         valid = slice(0, self._n)
@@ -512,7 +540,6 @@ class MyPrioritizedRNNMemory(MyMultiStepRNNMemory):
         epsilon=1e-4,
         **kwargs,
     ):
-
         super().__init__(
             capacity,
             state_shape,
