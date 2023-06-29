@@ -30,24 +30,24 @@ class CompositionAgent(RaisimAgent):
 
         env_cfg.update(
             dict(
-                env_name="isaacpointmass_simple",  # pointmassXd[,_simple,_augment]
+                env_name="isaacpointmass",  # pointmassXd[,_simple,_augment]
                 num_envs=int(512),
-                episode_max_step=int(500),
+                episode_max_step=int(50),
                 eval_interval=10,
-                total_episodes=int(10),
+                total_episodes=int(200),
                 random_robot_state=True,
                 random_target_state=True,
                 num_threads=10,
                 save_model=True,
-                render=True,  # render env
-                record=True,  # dump config, record video only works if env is rendered
+                render=False,  # render env
+                record=False,  # dump config, record video only works if env is rendered
             )
         )
         agent_cfg.update(
             dict(
                 # record folder name, options: [sfgpi, msf, sfcpi, dac, dacgpi, pickplace]
                 name="dac",
-                importance_sampling=True,
+                importance_sampling=False,
                 is_clip_max=1.0,
                 entropy_tuning=True,
                 alpha=0.2,
@@ -61,10 +61,10 @@ class CompositionAgent(RaisimAgent):
                 reward_scale=1.0,
                 grad_clip=None,
                 value_net_kwargs={
-                    "sizes": [32, 32],
-                    "activation": "selu",
+                    "sizes": [64, 64],
+                    "activation": "relu",
                     "layernorm": True,
-                    "droprate": 0.05,
+                    "droprate": 0.0,
                 },
                 policy_net_kwargs={
                     "sizes": [32, 32],
@@ -565,8 +565,15 @@ if __name__ == "__main__":
     from common.util import fix_config
 
     default_cfg = CompositionAgent.default_config()
-    wandb.init(mode="disabled", config=default_cfg)
+    default_cfg["buffer_cfg"]["mini_batch_size"] *= int(
+        default_cfg["env_cfg"]["num_envs"] / 200
+    )
+
+    wandb.init(config=default_cfg)
     cfg = fix_config(wandb.config)
+
+    cfg["buffer_cfg"]["n_env"] = cfg["env_cfg"]["num_envs"]
+    cfg["env_cfg"]["episode_max_step"] = int(50 * (512 / cfg["env_cfg"]["num_envs"]))
     pprint.pprint(cfg)
 
     agent = CompositionAgent(cfg)

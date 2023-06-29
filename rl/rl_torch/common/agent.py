@@ -4,6 +4,8 @@ import warnings
 from pathlib import Path
 
 import torch
+import torch.nn as nn
+import numpy as np
 
 # from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 from env.pointMass import PointMass
@@ -38,6 +40,35 @@ log_path = task_path + "/../log/"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
+class AverageMeter(nn.Module):
+    def __init__(self, in_shape, max_size):
+        super(AverageMeter, self).__init__()
+        self.max_size = max_size
+        self.current_size = 0
+        self.register_buffer("mean", torch.zeros(in_shape, dtype=torch.float32))
+
+    def update(self, values):
+        size = values.size()[0]
+        if size == 0:
+            return
+        new_mean = torch.mean(values.float(), dim=0)
+        size = np.clip(size, 0, self.max_size)
+        old_size = min(self.max_size - size, self.current_size)
+        size_sum = old_size + size
+        self.current_size = size_sum
+        self.mean = (self.mean * old_size + new_mean * size) / size_sum
+
+    def clear(self):
+        self.current_size = 0
+        self.mean.fill_(0)
+
+    def __len__(self):
+        return self.current_size
+
+    def get_mean(self):
+        return self.mean.squeeze(0).cpu().numpy()
+
+
 class AbstractAgent:
     def __init__(
         self,
@@ -69,7 +100,7 @@ class RaisimAgent(AbstractAgent):
             env_name="pointmass1d",
             num_envs=512,
             episode_max_step=500,
-            total_episodes=int(100),
+            total_episodes=int(50),
             random_robot_state=True,
             random_target_state=True,
             simulation_dt=0.01,
@@ -77,7 +108,7 @@ class RaisimAgent(AbstractAgent):
             num_threads=10,
             reward={"success": {"coeff": 1}},
             success_threshold=[1, 1, 1, 1],  # pos[m], vel[m/s], ang[rad], angvel[rad/s]
-            single_task=True,  # overwrite all task_weight to nav_w
+            single_task=False,  # overwrite all task_weight to nav_w
             seed=123,
             log_interval=5,
             eval=True,
@@ -123,17 +154,17 @@ class RaisimAgent(AbstractAgent):
             "single_task", False
         ):  # TODO: move this to the configuration
             self.task_weight = {  # an adhoc implementation for pm single task testing
-                "nav_w": (1, 0.5, 0, 0, 1),  # p, v, ang, angvel, success
-                "hov_w": (1, 0.5, 0, 0, 1),
-                "nav_w_eval": (1, 0.5, 0, 0, 10000),
-                "hov_w_eval": (1, 0.5, 0, 0, 10000),
+                "nav_w": (1, 0, 0, 0, 0),  # p, v, ang, angvel, success
+                "hov_w": (1, 0, 0, 0, 0),
+                "nav_w_eval": (1, 0, 0, 0, 0),
+                "hov_w_eval": (1, 0, 0, 0, 0),
             }
         else:
             self.task_weight = {
-                "nav_w": (1, 0.5, 0, 0, 1),  # p, v, ang, angvel, success
-                "hov_w": (1, 20, 0, 0, 1),
-                "nav_w_eval": (1, 0.5, 0, 0, 10000),
-                "hov_w_eval": (1, 5, 0, 0, 10000),
+                "nav_w": (0.9, 0.1, 0, 0, 0),  # p, v, ang, angvel, success
+                "hov_w": (0.1, 0.9, 0, 0, 0),
+                "nav_w_eval": (0, 0, 0, 0, 1),
+                "hov_w_eval": (0, 0, 0, 0, 1),
             }
         if "quadcopter" in self.env_name:
             self.task_weight = {
@@ -147,9 +178,11 @@ class RaisimAgent(AbstractAgent):
             env_name=self.env_name,
             task_weight=self.task_weight,
             success_threshold=self.success_threshold,
+            n_env=self.env_cfg["num_envs"],
         )
 
         self.env, w, feature = self.env_spec.get_env_w_feature()
+        self.env_max_episodes = self.env_spec.env_max_episodes
 
         self.n_env = self.env_cfg["num_envs"]
         self.episode_max_step = self.env_cfg["episode_max_step"]
@@ -213,6 +246,10 @@ class RaisimAgent(AbstractAgent):
         self.steps = 0
         self.episodes = 0
 
+        self.games_to_track = 100
+        self.game_rewards = AverageMeter(1, self.games_to_track).to("cuda:0")
+        self.game_lengths = AverageMeter(1, self.games_to_track).to("cuda:0")
+
     def run(self):
         # self.visualizer.spawn()
 
@@ -228,6 +265,8 @@ class RaisimAgent(AbstractAgent):
         episode_r = episode_steps = 0
         done = False
 
+        print("episode = ", self.episodes)
+
         s = self.reset_env()
         for _ in range(self.episode_max_step):
             a = self.act(s)
@@ -236,16 +275,12 @@ class RaisimAgent(AbstractAgent):
             self.env.step(a)
             done = self.env.reset_buf.clone()
 
-            episodeRet = self.env.return_buf.clone()
+            # episodeRet = self.env.return_buf.clone()
+            episodeLen = self.env.progress_buf.clone()
 
             # s_next = self.env.observe(update_statistics=False)
             s_next = self.env.obs_buf.clone()
             self.env.reset()
-
-            done_ids = done.nonzero(as_tuple=False).squeeze(-1)
-            if done_ids.size()[0]:
-                episodic_return = torch.mean(episodeRet[done_ids].float()).item()
-                print(f"episodic_return={episodic_return}")
 
             r = self.calc_reward(s_next, self.w)
             masked_done = False if episode_steps >= self.episode_max_step else done
@@ -262,11 +297,17 @@ class RaisimAgent(AbstractAgent):
             episode_steps += 1
             episode_r += r
 
+            done_ids = done.nonzero(as_tuple=False).squeeze(-1)
+            if done_ids.size()[0]:
+                self.game_rewards.update(episode_r[done_ids])
+                self.game_lengths.update(episodeLen[done_ids])
+
             if episode_steps >= self.episode_max_step:
                 break
 
         # if self.episodes % self.log_interval == 0:
-        wandb.log({"reward/train": torch.mean(episode_r).item()})
+        wandb.log({"reward/train": self.game_rewards.get_mean()})
+        wandb.log({"length/train": self.game_lengths.get_mean()})
 
         if self.eval and (self.episodes % self.eval_interval == 0):
             self.evaluate()
@@ -313,14 +354,15 @@ class RaisimAgent(AbstractAgent):
             return
 
         print(f"===== evaluate at episode: {self.episodes} ====")
-        self.visualizer.turn_on(self.episodes)
+        print(f"===== eval for running for {self.env_max_episodes} episodes ===")
+        # self.visualizer.turn_on(self.episodes)
 
         returns = torch.zeros((episodes,), dtype=torch.float32)
         for i in range(episodes):
             episode_r = 0.0
 
             s = self.reset_env()
-            for _ in range(self.episode_max_step):
+            for _ in range(self.env_max_episodes):
                 a = self.act(s, "exploit")
                 self.env.step(a)
                 # s_next = self.env.observe(update_statistics=False)
@@ -339,7 +381,7 @@ class RaisimAgent(AbstractAgent):
             returns[i] = torch.mean(episode_r).item()
 
         print(f"===== finish evaluate ====")
-        self.visualizer.turn_off()
+        # self.visualizer.turn_off()
         wandb.log({"reward/eval": torch.mean(returns).item()})
 
         if self.save_model:
@@ -388,10 +430,7 @@ class RaisimAgent(AbstractAgent):
 
 class raisim_multitask_env:
     def __init__(
-        self,
-        env_name,
-        task_weight,
-        success_threshold=(1, 1, 1, 1),
+        self, env_name, task_weight, success_threshold=(1, 1, 1, 1), n_env=512
     ) -> None:
         self.env_name = env_name
 
@@ -401,6 +440,10 @@ class raisim_multitask_env:
         self.hov_w_eval = task_weight["hov_w_eval"]
 
         self.success_threshold = success_threshold
+
+        self.n_env = n_env
+
+        self.env_max_episodes = 500
 
     def get_env_w_feature(self):
         env = self.select_env(self.env_name)
@@ -412,33 +455,22 @@ class raisim_multitask_env:
 
     def select_env(self, env_name):
         # if "pointmass1d" in env_name:
-        #     from raisimGymTorch.env.bin import pointmass1d
-
-        #     env = pointmass1d
-        # elif "pointmass2d" in env_name:
-        #     from raisimGymTorch.env.bin import pointmass2d
-
-        #     env = pointmass2d
-        # elif "pointmass3d" in env_name:
-        #     from raisimGymTorch.env.bin import pointmass3d
-
-        #     env = pointmass3d
-        # elif "quadcopter" in env_name:
-        #     from raisimGymTorch.env.bin import quadcopter_task0
+        #     from raisimGymTorch.env.bin import pointmass1
 
         #     env = quadcopter_task0
         if "isaacpointmass" in env_name:
 
             class pconfig:
-                def __init__(self) -> None:
-                    self.num_envs = 512
+                def __init__(self, n_env) -> None:
+                    self.num_envs = n_env
                     self.sim_device = "cuda:0"
-                    self.headless = False
+                    self.headless = True
                     self.compute_device_id = 0
                     self.graphics_device_id = 0
 
-            args = pconfig()
+            args = pconfig(self.n_env)
             env = PointMass(args)
+            self.env_max_episodes = env.max_episode_length
         else:
             raise NotImplementedError(
                 "select one Raisim Env: pointmassXd, quadcopter_taskX"

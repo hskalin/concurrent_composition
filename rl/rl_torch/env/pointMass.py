@@ -20,7 +20,7 @@ class PointMass(VecEnv):
         self.max_episode_length = 500  # maximum episode length
 
         self.ball_height = 2
-        self.goal_lim = 4
+        self.goal_lim = 10
 
         super().__init__(args=args)
 
@@ -75,7 +75,7 @@ class PointMass(VecEnv):
         self.gym.add_ground(self.sim, plane_params)
 
         # define environment space (for visualisation)
-        spacing = 4.0
+        spacing = self.goal_lim
         lower = gymapi.Vec3(0.5 * -spacing, -spacing, 0.0)
         upper = gymapi.Vec3(0.5 * spacing, spacing, spacing)
         num_per_row = int(np.sqrt(self.args.num_envs))
