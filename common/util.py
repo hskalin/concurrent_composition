@@ -4,6 +4,7 @@ import torch
 import numpy as np
 import json
 import torch.nn as nn
+import collections.abc
 
 from omegaconf import DictConfig, OmegaConf
 from typing import Dict
@@ -49,6 +50,22 @@ def omegaconf_to_dict(d: DictConfig) -> Dict:
     return ret
 
 
+def fix_wandb(d):
+    ret = {}
+    d = dict(d)
+    for k, v in d.items():
+        if not "." in k:
+            ret[k] = v
+        else:
+            ks = k.split(".")
+            a = fix_wandb({".".join(ks[1:]): v})
+            if ks[0] not in ret:
+                ret[ks[0]] = {}
+            for _k, _v in a.items():
+                ret[ks[0]][_k] = _v
+    return ret
+
+
 def print_dict(val, nesting: int = -4, start: bool = True):
     """Outputs a nested dictionory."""
     if type(val) == dict:
@@ -61,6 +78,15 @@ def print_dict(val, nesting: int = -4, start: bool = True):
             print_dict(val[k], nesting, start=False)
     else:
         print(val)
+
+
+def update_dict(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = update_dict(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

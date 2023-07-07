@@ -20,4 +20,4 @@ command:
   - ${env}
   - python
   - ${program}
-  - "agent=SAC"
+  - agent=SAC
