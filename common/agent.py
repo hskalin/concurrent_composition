@@ -40,7 +40,7 @@ class IsaacAgent:
 
         env_spec = MultiTaskEnv(env_cfg=self.env_cfg)
         self.env, w, feature = env_spec.getEnv()
-        self.env_max_episodes = self.env_cfg["max_episode_length"]
+        self.env_max_steps = self.env_cfg["max_episode_length"]
 
         self.n_env = self.env_cfg["num_envs"]
         self.episode_max_step = self.env_cfg["episode_max_step"]
@@ -215,7 +215,7 @@ class IsaacAgent:
             return
 
         print(f"===== evaluate at episode: {self.episodes} ====")
-        print(f"===== eval for running for {self.env_max_episodes} episodes ===")
+        print(f"===== eval for running for {self.env_max_steps} steps ===")
         # self.visualizer.turn_on(self.episodes)
 
         returns = torch.zeros((episodes,), dtype=torch.float32)
@@ -223,7 +223,7 @@ class IsaacAgent:
             episode_r = 0.0
 
             s = self.reset_env()
-            for _ in range(self.env_max_episodes):
+            for _ in range(self.env_max_steps):
                 a = self.act(s, "exploit")
                 self.env.step(a)
                 # s_next = self.env.observe(update_statistics=False)

@@ -14,7 +14,7 @@ parameters:
   buffer.mini_batch_size:
     values: [2048, 4096]
   env.num_envs:
-    values: [512, 2048, 4096]
+    values: [1024]
 
 command:
   - ${env}

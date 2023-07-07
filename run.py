@@ -23,7 +23,7 @@ def launch_rlg_hydra(cfg: DictConfig):
     wandb.init()
     wandb_dict = fix_wandb(wandb.config)
 
-    # print_dict(wandb_dict)
+    print_dict(wandb_dict)
 
     update_dict(cfg_dict, wandb_dict)
 
