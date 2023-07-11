@@ -1,8 +1,7 @@
 env_name: "PointMass"
 num_envs: 1024
-episode_max_step: 50
+episode_max_step: 50 # training episode length
 total_episodes: 300
-max_episode_length: 500
 reward:
   success: 
     coeff": 1
@@ -10,6 +9,7 @@ success_threshold: [1, 1, 1, 1]  # pos[m], vel[m/s], ang[rad], angvel[rad/s]
 single_task: False  # overwrite all task_weight to nav_w
 log_interval: 5
 eval: True
+max_episode_length: 500 # evaluation episode length
 eval_interval: 10
 eval_episodes: 1
 save_model: False  # save model after evaluation
