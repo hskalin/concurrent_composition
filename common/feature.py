@@ -44,7 +44,7 @@ class pm_feature:
             features.append(-torch.linalg.norm(pos, axis=1, keepdims=True))
 
         # vel = s[:, 12:15]
-        vel = s[:, self.dim : 2 * self.dim]
+        vel = s[:, self.envdim : 2 * self.envdim]
         if self._vel_err:
             features.append(-torch.abs(vel))
         if self._vel_norm:
