@@ -15,11 +15,15 @@ from common.util import (
 from common.value_function import TwinnedMultiheadSFNetwork
 from common.compositions import Compositions
 from torch.optim import Adam
+import numpy as np
 
 
 class CompositionAgent(IsaacAgent):
     def __init__(self, cfg):
         super().__init__(cfg)
+        torch.manual_seed(cfg["seed"])
+        np.random.seed(cfg["seed"])
+
         self.lr = self.agent_cfg["lr"]
         self.policy_lr = self.agent_cfg["policy_lr"]
         self.value_net_kwargs = self.agent_cfg["value_net_kwargs"]

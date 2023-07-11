@@ -1,5 +1,5 @@
 env_name: "PointMass"
-num_envs: 512
+num_envs: 1024
 episode_max_step: 50
 total_episodes: 300
 max_episode_length: 500

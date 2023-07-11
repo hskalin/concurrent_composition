@@ -1,0 +1,17 @@
+program: run.py
+method: grid
+metric:
+  goal: maximize
+  name: reward/eval
+
+parameters:
+  env.feature.type:
+    values: ["regular", "augment"]
+  seed:
+    values: [123, 343, 8821, 2357, 2503, 3797, 863, 6101, 6361, 2113]
+
+command:
+  - ${env}
+  - python
+  - ${program}
+  - agent=DAC
