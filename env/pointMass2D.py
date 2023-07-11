@@ -10,11 +10,11 @@ import torch
 import os
 
 
-class PointMass(VecEnv):
+class PointMass2D(VecEnv):
     def __init__(self, cfg):
         # task-specific parameters
-        self.num_obs = 6  # pole_angle + pole_vel + cart_vel + cart_pos
-        self.num_act = 3  # force applied on the pole (-1 to 1)
+        self.num_obs = 4
+        self.num_act = 2
         self.reset_dist = 10.0  # when to reset
         self.max_push_effort = 5.0  # the range of force applied to the pointer
 
@@ -29,9 +29,7 @@ class PointMass(VecEnv):
             * 2
             * self.goal_lim
         )
-        self.goal_pos[..., 2] += self.goal_lim + 1
-
-        self.goal_rot = torch.zeros((self.num_envs, 3), device=self.sim_device)
+        self.goal_pos[..., 2] = self.ball_height
 
         # initialise envs and state tensors
         self.envs, self.num_bodies = self.create_envs()
@@ -115,21 +113,17 @@ class PointMass(VecEnv):
 
         self.obs_buf[env_ids, 0] = pos[env_ids, 0]
         self.obs_buf[env_ids, 1] = pos[env_ids, 1]
-        self.obs_buf[env_ids, 2] = pos[env_ids, 2]
 
         # relative xyz vel
         vel = self.rb_lvels[env_ids, 0]
 
-        self.obs_buf[env_ids, 3] = vel[env_ids, 0]
-        self.obs_buf[env_ids, 4] = vel[env_ids, 1]
-        self.obs_buf[env_ids, 5] = vel[env_ids, 2]
+        self.obs_buf[env_ids, 2] = vel[env_ids, 0]
+        self.obs_buf[env_ids, 3] = vel[env_ids, 1]
 
     def get_reward(self):
         # retrieve environment observations from buffer
         x = self.obs_buf[:, 0]
         y = self.obs_buf[:, 1]
-        z = self.obs_buf[:, 2]
-
         (
             self.reward_buf[:],
             self.reset_buf[:],
@@ -138,7 +132,6 @@ class PointMass(VecEnv):
         ) = compute_point_reward(
             x,
             y,
-            z,
             self.reset_dist,
             self.reset_buf,
             self.progress_buf,
@@ -157,11 +150,13 @@ class PointMass(VecEnv):
         positions = torch.zeros(
             (len(env_ids), self.num_bodies, 3), device=self.sim_device
         )
-        positions[:, :, 2] = self.goal_lim
+        positions[:, :, 2] = self.ball_height
 
         velocities = 2 * (
             torch.rand((len(env_ids), self.num_bodies, 3), device=self.sim_device) - 0.5
         )
+
+        velocities[..., 2] = 0
 
         rotations = torch.zeros((len(env_ids), 3), device=self.sim_device)
 
@@ -170,7 +165,7 @@ class PointMass(VecEnv):
             * 2
             * self.goal_lim
         )
-        pos_goals[:, 2] += self.goal_lim + 1
+        pos_goals[:, 2] = self.ball_height
 
         # set random pos, rot, vels
         self.rb_pos[env_ids, :] = positions[:]
@@ -208,7 +203,6 @@ class PointMass(VecEnv):
 
         self.actions_tensor[:, 0, 0] = actions[:, 0]
         self.actions_tensor[:, 0, 1] = actions[:, 1]
-        self.actions_tensor[:, 0, 2] = actions[:, 2]
 
         # unwrap tensors
         forces = gymtorch.unwrap_tensor(self.actions_tensor)
@@ -292,7 +286,6 @@ class PointMass(VecEnv):
 def compute_point_reward(
     x_pos,
     y_pos,
-    z_pos,
     reset_dist,
     reset_buf,
     progress_buf,
@@ -300,10 +293,10 @@ def compute_point_reward(
     truncated_buf,
     max_episode_length,
 ):
-    # type: (Tensor, Tensor, Tensor, float, Tensor, Tensor, Tensor, Tensor, float) -> Tuple[Tensor, Tensor, Tensor, Tensor]
+    # type: (Tensor, Tensor, float, Tensor, Tensor, Tensor, Tensor, float) -> Tuple[Tensor, Tensor, Tensor, Tensor]
 
     # square distance from goal
-    sqr_dist = (x_pos) ** 2 + (y_pos) ** 2 + (z_pos) ** 2
+    sqr_dist = (x_pos) ** 2 + (y_pos) ** 2
 
     # Proximity reward
     A1 = 1

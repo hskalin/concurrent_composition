@@ -21,8 +21,6 @@ import numpy as np
 class CompositionAgent(IsaacAgent):
     def __init__(self, cfg):
         super().__init__(cfg)
-        torch.manual_seed(cfg["seed"])
-        np.random.seed(cfg["seed"])
 
         self.lr = self.agent_cfg["lr"]
         self.policy_lr = self.agent_cfg["policy_lr"]

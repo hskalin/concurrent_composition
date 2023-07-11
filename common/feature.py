@@ -7,7 +7,10 @@ class pm_feature:
         self,
         combination=[True, False, False, False, False, False, False],
         success_threshold=(1, 1, 1, 1),
+        dim=3,
     ) -> None:
+        self.envdim = dim
+
         self._pos_err = combination[0]
         self._pos_norm = combination[1]
         self._vel_err = combination[2]
@@ -22,26 +25,26 @@ class pm_feature:
         self._st_angvel = success_threshold[3]
 
         self.dim = (
-            3 * combination[0]  # pos
+            self.envdim * combination[0]  # pos
             + combination[1]  # pos_norm
-            + 3 * combination[2]  # vel
+            + self.envdim * combination[2]  # vel
             + combination[3]  # vel_norm
-            + 3 * combination[4]  # ang
-            + 3 * combination[5]  # angvel
+            + self.envdim * combination[4]  # ang
+            + self.envdim * combination[5]  # angvel
             + combination[6]  # suc
         )
 
     def extract(self, s):
         features = []
 
-        pos = s[:, 0:3]
+        pos = s[:, 0 : self.envdim]
         if self._pos_err:
             features.append(-torch.abs(pos))
         if self._pos_norm:
             features.append(-torch.linalg.norm(pos, axis=1, keepdims=True))
 
         # vel = s[:, 12:15]
-        vel = s[:, 3:6]
+        vel = s[:, self.dim : 2 * self.dim]
         if self._vel_err:
             features.append(-torch.abs(vel))
         if self._vel_norm:

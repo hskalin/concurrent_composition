@@ -23,21 +23,32 @@ class MultiTaskEnv:
     def define_tasks(self, env_cfg, combination):
         def get_w(c, d, w):
             # feature order: [pos, pos_norm, vel, vel_norm, ang, angvel, success]
-            w_pos = c[0] * (d * [w[0]] + (3 - d) * [0])
+            # w_pos = c[0] * (d * [w[0]] + (3 - d) * [0])
+            # w_pos_norm = c[1] * [w[0]]
+            # w_vel = c[2] * (d * [w[1]] + (3 - d) * [0])
+            # w_vel_norm = c[3] * [w[1]]
+            # w_ang = c[4] * (d * [w[2]] + (3 - d) * [0])
+            # w_angvel = c[5] * (d * [w[3]] + (3 - d) * [0])
+            # w_success = c[6] * [w[4]]
+
+            w_pos = c[0] * d * [w[0]]
             w_pos_norm = c[1] * [w[0]]
-            w_vel = c[2] * (d * [w[1]] + (3 - d) * [0])
+            w_vel = c[2] * d * [w[1]]
             w_vel_norm = c[3] * [w[1]]
-            w_ang = c[4] * (d * [w[2]] + (3 - d) * [0])
-            w_angvel = c[5] * (d * [w[3]] + (3 - d) * [0])
+            w_ang = c[4] * d * [w[2]]
+            w_angvel = c[5] * d * [w[3]]
             w_success = c[6] * [w[4]]
+
             return (
                 w_pos + w_pos_norm + w_vel + w_vel_norm + w_ang + w_angvel + w_success
             )
 
-        w_nav = get_w(combination, 3, self.nav_w)
-        w_hov = get_w(combination, 3, self.hov_w)
-        w_nav_eval = get_w(combination, 3, self.nav_w_eval)
-        w_hov_eval = get_w(combination, 3, self.hov_w_eval)
+        dim = env_cfg["dim"]
+
+        w_nav = get_w(combination, dim, self.nav_w)
+        w_hov = get_w(combination, dim, self.hov_w)
+        w_nav_eval = get_w(combination, dim, self.nav_w_eval)
+        w_hov_eval = get_w(combination, dim, self.hov_w_eval)
 
         tasks_train = (
             torch.tensor(w_nav, device="cuda:0"),
@@ -53,6 +64,6 @@ class MultiTaskEnv:
         feature_type = self.env_cfg["feature"]["type"]
         combination = self.env_cfg["feature"][feature_type]
         task_w = self.define_tasks(self.env_cfg, combination)
-        feature = pm_feature(combination, self.success_threshold)
+        feature = pm_feature(combination, self.success_threshold, self.env_cfg["dim"])
 
         return self.env, task_w, feature

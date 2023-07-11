@@ -8,7 +8,7 @@ experiment: ''
 num_envs: ''
 
 # seed - set to -1 to choose random seed
-seed: 123
+seed: 7039
 # set to True for deterministic performance
 torch_deterministic: False
 
@@ -57,8 +57,8 @@ force_render: True
 
 # set default task and default training config based on task
 defaults:
-  - env: PointMass
-  - agent: DAC
+  - env: PointMass2D
+  - agent: SAC
   - buffer: buffer
   - hydra/job_logging: disabled
 
