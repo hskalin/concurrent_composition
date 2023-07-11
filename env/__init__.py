@@ -1,6 +1,6 @@
 from .pointMass3D import PointMass3D
 from .pointMass2D import PointMass2D
-from .pointer import Pointer
+from .pointer2D import Pointer
 
 
 # Mappings from strings to environments
