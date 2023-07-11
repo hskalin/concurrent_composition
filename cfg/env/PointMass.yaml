@@ -19,10 +19,10 @@ log_path: "../logs/"  # config, video, model log path
 
 task:
   single:
-    nav_w: [1, 0, 0, 0, 0]  # p, v, ang, angvel, success
-    hov_w: [1, 0, 0, 0, 0]
-    nav_w_eval: [1, 0, 0, 0, 0]
-    hov_w_eval: [1, 0, 0, 0, 0]
+    nav_w: [1, 0.5, 0, 0, 10]  # p, v, ang, angvel, success
+    hov_w: [1, 0.5, 0, 0, 10]
+    nav_w_eval: [1, 0.5, 0, 0, 10]
+    hov_w_eval: [1, 0.5, 0, 0, 10]
   multi:
     nav_w: [1, 0, 0, 0, 0]  # p, v, ang, angvel, success
     hov_w: [0, 1, 0, 0, 0]

@@ -21,16 +21,14 @@ def launch_rlg_hydra(cfg: DictConfig):
     wandb_dict = fix_wandb(wandb.config)
 
     print_dict(wandb_dict)
-
     update_dict(cfg_dict, wandb_dict)
 
     cfg_dict["buffer"]["n_env"] = cfg_dict["env"]["num_envs"]
     # cfg_dict["env"]["episode_max_step"] = int(50 * (512 / cfg_dict["env"]["num_envs"]))
-
     print_dict(cfg_dict)
 
-    torch.manual_seed(cfg.seed)
-    np.random.seed(cfg.seed)
+    torch.manual_seed(cfg_dict["seed"])
+    np.random.seed(cfg_dict["seed"])
 
     agent = CompositionAgent(cfg_dict)
     # agent = SACAgent(cfg=cfg_dict)

@@ -1,4 +1,4 @@
-name: "msf"
+name: "dacgpi"
 is_clip_max: 1.0
 entropy_tuning: True
 alpha: 1.
