@@ -7,5 +7,5 @@ from .pointer2D import Pointer
 env_map = {
     "PointMass3D": PointMass3D,
     "PointMass2D": PointMass2D,
-    "Pointer": Pointer,
+    "Pointer2D": Pointer,
 }

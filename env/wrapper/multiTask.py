@@ -1,5 +1,5 @@
 from env import env_map
-from common.feature import pm_feature
+from common.feature import pm_feature, pointer_feature
 import torch
 
 
@@ -64,6 +64,15 @@ class MultiTaskEnv:
         feature_type = self.env_cfg["feature"]["type"]
         combination = self.env_cfg["feature"][feature_type]
         task_w = self.define_tasks(self.env_cfg, combination)
-        feature = pm_feature(combination, self.success_threshold, self.env_cfg["dim"])
+        if "pointer" in self.env_cfg["env_name"].lower():
+            feature = pointer_feature(
+                combination, self.success_threshold, self.env_cfg["dim"]
+            )
+        elif "pointmass" in self.env_cfg["env_name"].lower():
+            feature = pm_feature(
+                combination, self.success_threshold, self.env_cfg["dim"]
+            )
+        else:
+            raise NotImplementedError(f'no such env {self.env_cfg["env_name"]}')
 
         return self.env, task_w, feature

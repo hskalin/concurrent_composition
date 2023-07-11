@@ -6,10 +6,12 @@ metric:
 
 parameters:
   env.feature.type:
-    values: ["regular", "augment"]
+    values: ["augment", "regular"]
   seed:
     values: [123, 343, 7093, 2357, 2503, 3797, 863, 6101, 6361, 2113]
-
+  env.single_task: 
+    values: [False]
+    
 command:
   - ${env}
   - python

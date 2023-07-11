@@ -62,12 +62,15 @@ class pm_feature:
         return suc
 
 
-class prism_feature:
+class pointer_feature:
     def __init__(
         self,
         combination=[True, True, True, True, True, True],
         success_threshold=(1, 1, 1, 1),
+        dim=3,
     ) -> None:
+        self.envdim = dim
+
         self._pos_err = combination[0]
         self._pos_norm = combination[1]
         self._vel_err = combination[2]
@@ -81,32 +84,35 @@ class prism_feature:
         self._st_ang = success_threshold[2]
         self._st_angvel = success_threshold[3]
 
+        # magic_val = 4 * (self.envdim**2) - 18 * self.envdim + 21
+        magic_val = 1
+
         self.dim = (
-            3 * combination[0]  # pos
+            self.envdim * combination[0]  # pos
             + combination[1]  # pos_norm
-            + 3 * combination[2]  # vel
+            + self.envdim * combination[2]  # vel
             + combination[3]  # vel_norm
-            + 3 * combination[4]  # ang
-            + 3 * combination[5]  # angvel
+            + magic_val * combination[4]  # ang
+            + magic_val * combination[5]  # angvel
             + combination[6]  # suc
         )
 
     def extract(self, s):
         features = []
 
-        pos = s[:, 0:3]
+        pos = s[:, 3:5]
         if self._pos_err:
             features.append(-torch.abs(pos))
         if self._pos_norm:
             features.append(-torch.linalg.norm(pos, axis=1, keepdims=True))
 
-        vel = s[:, 12:15]
+        vel = s[:, 5:7]
         if self._vel_err:
             features.append(-torch.abs(vel))
         if self._vel_norm:
             features.append(-torch.linalg.norm(vel, axis=1, keepdims=True))
 
-        angvel = s[:, 15:18]
+        angvel = s[:, 7]
         if self._angvel_err:
             features.append(-torch.abs(angvel))
 

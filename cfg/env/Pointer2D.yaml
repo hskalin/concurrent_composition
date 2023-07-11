@@ -1,14 +1,14 @@
-env_name: "PointMass2D"
-num_envs: 1024
+env_name: "Pointer2D"
+num_envs: 512
 dim: 2
 episode_max_step: 50
-total_episodes: 200
-max_episode_length: 500
+total_episodes: 400
+max_episode_length: 700
 reward:
   success: 
     coeff": 1
 success_threshold: [1, 1, 1, 1]  # pos[m], vel[m/s], ang[rad], angvel[rad/s]
-single_task: False  # overwrite all task_weight to nav_w
+single_task: True # overwrite all task_weight to nav_w
 log_interval: 5
 eval: True
 eval_interval: 10
@@ -38,6 +38,6 @@ feature:
   
 sim:
   sim_device: "cuda:0"
-  headless: True
+  headless: False
   compute_device_id: 0
   graphics_device_id: 0
