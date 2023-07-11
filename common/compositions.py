@@ -165,7 +165,7 @@ class Compositions:
         # [N, Ha, Hsf, F] <-- [N, S], [N, Ha, A]
         curr_sf = self.calc_curr_sf(s, acts)
         # [N,Ha,Hsf]<--[N,Ha,Hsf,F],[N,F]
-        qs = torch.einsum("ijkl,il->ijk", curr_sf, w)
+        qs = torch.einsum("ijkl,il->ijk", curr_sf.float(), w.float())
         return qs  # [N,Ha,Hsf]
 
     def gpi(self, acts, value, rule="q"):

@@ -1,5 +1,5 @@
 capacity : 2000000 
-mini_batch_size : 2048
+mini_batch_size : 4096
 min_n_experience : 1024 
 multi_step : 5 
 n_env : 512
