@@ -504,9 +504,9 @@ def compute_point_reward(
     reset = torch.where(
         torch.abs(sqr_dist) > 256, torch.ones_like(reset_buf), reset_buf
     )
-    # reset = torch.where(
-    #     (z_abs < 1.75) | (z_abs > 2.25), torch.ones_like(reset_buf), reset
-    # )  # limit the range and prevent orientation drift bug
+    reset = torch.where(
+        (z_abs < 1.75) | (z_abs > 2.25), torch.ones_like(reset_buf), reset
+    )  # limit the range and prevent orientation drift bug
     reset = torch.where(torch.abs(wz) > 70, torch.ones_like(reset_buf), reset)
     # reset = torch.where(torch.abs(wy) > 70, torch.ones_like(reset_buf), reset)
     # reset = torch.where(torch.abs(wx) > 70, torch.ones_like(reset_buf), reset)
