@@ -22,5 +22,5 @@ command:
   - ${env}
   - python
   - ${program}
-  - agent=DAC
+  - agent=SFGPI
   - env=Pointer2D
