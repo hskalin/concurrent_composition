@@ -2,13 +2,13 @@ env_name: "Pointer2D"
 num_envs: 512
 dim: 2
 episode_max_step: 50
-total_episodes: 300
+total_episodes: 600
 max_episode_length: 700
 reward:
   success: 
     coeff": 1
 success_threshold: [1, 1, 1, 1]  # pos[m], vel[m/s], ang[rad], angvel[rad/s]
-single_task: True # overwrite all task_weight to nav_w
+single_task: False # overwrite all task_weight to nav_w
 log_interval: 5
 eval: True
 eval_interval: 10
@@ -19,6 +19,7 @@ record: False  # dump config, record video only works if env is rendered
 log_path: "../logs/"  # config, video, model log path
 
 task:
+  target_vel: [1, 0]
   single:
     nav_w:      [0.5, 0.0, 0.0, 0.0, 1]  # p, v, ang, angvel, success
     hov_w:      [0.5, 0.005, 0.5, 0.001, 1] 
@@ -26,11 +27,12 @@ task:
     hov_w_eval: [0.5, 0.005, 0.5, 0.001, 1] 
   multi:
     nav_w:      [1, 0, 0, 0.0, 0]  # p, v, ang, angvel, success
-    hov_w:      [0, 0.5, 1, 0.5, 0]
+    hov_w:      [0, 0.8, 0, 0.2, 0]
     nav_w_eval: [0, 0, 0, 0, 1]
     hov_w_eval: [0, 0, 0, 0, 1]
 
 feature:
+  pos_index: 3
   type: "regular"
   simple: [True, False, False, False, False]
   regular: [True, True, True, True, True]
@@ -38,6 +40,6 @@ feature:
   
 sim:
   sim_device: "cuda:0"
-  headless: True
+  headless: False
   compute_device_id: 0
   graphics_device_id: 0

@@ -346,8 +346,16 @@ class Pointer(VecEnv):
         self.get_reward()
 
     def _generate_lines(self):
-        num_lines = 3
-        line_colors = [[0, 0, 0], [0, 0, 0], [200, 0, 0]]
+        num_lines = 3 + 4
+        line_colors = [
+            [0, 0, 0],
+            [0, 0, 0],
+            [200, 0, 0],
+            [0, 200, 0],
+            [0, 200, 0],
+            [0, 200, 0],
+            [0, 200, 0],
+        ]
 
         roll, pitch, yaw = get_euler_xyz(self.rb_rot[:, 0, :])
         xa, ya, za = localToGlobalRot(
@@ -389,6 +397,14 @@ class Pointer(VecEnv):
                     self.rb_pos[i, 0, 1].item() - ya[i].item(),
                     self.rb_pos[i, 0, 2].item() - za[i].item(),
                 ],
+                [self.goal_pos[i, 0].item() + 3, self.goal_pos[i, 1].item() + 3, 0.1],
+                [self.goal_pos[i, 0].item() + 3, self.goal_pos[i, 1].item() - 3, 0.1],
+                [self.goal_pos[i, 0].item() + 3, self.goal_pos[i, 1].item() + 3, 0.1],
+                [self.goal_pos[i, 0].item() - 3, self.goal_pos[i, 1].item() + 3, 0.1],
+                [self.goal_pos[i, 0].item() - 3, self.goal_pos[i, 1].item() - 3, 0.1],
+                [self.goal_pos[i, 0].item() - 3, self.goal_pos[i, 1].item() + 3, 0.1],
+                [self.goal_pos[i, 0].item() - 3, self.goal_pos[i, 1].item() - 3, 0.1],
+                [self.goal_pos[i, 0].item() + 3, self.goal_pos[i, 1].item() - 3, 0.1],
             ]
 
             line_vertices.append(vertices)

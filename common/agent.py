@@ -173,8 +173,10 @@ class IsaacAgent:
         if self.eval and (self.episodes % self.eval_interval == 0):
             self.evaluate()
 
-    def update_w(self, s, w, w_navi, w_hover, thr=4):
-        dist = torch.linalg.norm(s[:, 0:3], axis=1)
+    def update_w(self, s, w, w_navi, w_hover, thr=3):
+        pos_index = self.env_cfg["feature"]["pos_index"]
+        dim = self.env_cfg["dim"]
+        dist = torch.linalg.norm(s[:, pos_index : pos_index + dim], axis=1)
         w[torch.where(dist <= thr)[0], :] = w_hover
         w[torch.where(dist > thr)[0], :] = w_navi
 

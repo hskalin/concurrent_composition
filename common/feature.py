@@ -65,11 +65,12 @@ class pm_feature:
 class pointer_feature:
     def __init__(
         self,
+        env_cfg,
         combination=[True, True, True, True, True],
         success_threshold=(1, 1, 1, 1),
-        dim=3,
     ) -> None:
-        self.envdim = dim
+        self.target_vel = torch.tensor(env_cfg["task"]["target_vel"], device="cuda:0")
+        self.envdim = env_cfg["dim"]
 
         # self._pos_err = combination[0]
         # self._pos_norm = combination[1]
@@ -108,7 +109,9 @@ class pointer_feature:
 
         vel = s[:, 5:7]
         if self._vel_norm:
-            features.append(-torch.linalg.norm(vel, axis=1, keepdims=True))
+            features.append(
+                -torch.linalg.norm(vel - self.target_vel, axis=1, keepdims=True)
+            )
 
         ang = s[:, 0:1]
         if self._ang_norm:

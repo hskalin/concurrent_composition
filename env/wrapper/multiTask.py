@@ -74,9 +74,7 @@ class MultiTaskEnv:
         combination = self.env_cfg["feature"][feature_type]
         task_w = self.define_tasks(self.env_cfg, combination)
         if "pointer" in self.env_cfg["env_name"].lower():
-            feature = pointer_feature(
-                combination, self.success_threshold, self.env_cfg["dim"]
-            )
+            feature = pointer_feature(self.env_cfg, combination, self.success_threshold)
         elif "pointmass" in self.env_cfg["env_name"].lower():
             feature = pm_feature(
                 combination, self.success_threshold, self.env_cfg["dim"]
