@@ -21,7 +21,7 @@ class Pointer(VecEnv):
         self.max_episode_length = 1000  # maximum episode length
 
         self.ball_height = 2
-        self.goal_lim = 10
+        self.goal_lim = 8
 
         super().__init__(cfg=cfg)
 
@@ -71,7 +71,7 @@ class Pointer(VecEnv):
         self.gym.add_ground(self.sim, plane_params)
 
         # define environment space (for visualisation)
-        spacing = 4.0
+        spacing = self.goal_lim
         lower = gymapi.Vec3(0.5 * -spacing, -spacing, 0.0)
         upper = gymapi.Vec3(0.5 * spacing, spacing, spacing)
         num_per_row = int(np.sqrt(self.num_envs))
@@ -121,6 +121,14 @@ class Pointer(VecEnv):
         pitch = torch.where(pitch > torch.pi, pitch - 2 * torch.pi, pitch)
         yaw = torch.where(yaw > torch.pi, yaw - 2 * torch.pi, yaw)
         roll = torch.where(roll > torch.pi, roll - 2 * torch.pi, roll)
+
+        # fix for orientation bug
+        self.reset_buf = torch.where(
+            abs(pitch) > 0.0873, torch.ones_like(self.reset_buf), self.reset_buf
+        )
+        self.reset_buf = torch.where(
+            abs(roll) > 0.0873, torch.ones_like(self.reset_buf), self.reset_buf
+        )
 
         # angles
         # self.obs_buf[env_ids, 0] = roll - self.goal_rot[env_ids, 0]
@@ -494,9 +502,11 @@ def compute_point_reward(
     return_buf += reward
 
     reset = torch.where(
-        torch.abs(sqr_dist) > 100, torch.ones_like(reset_buf), reset_buf
+        torch.abs(sqr_dist) > 256, torch.ones_like(reset_buf), reset_buf
     )
-    reset = torch.where(z_abs < 0.8, torch.ones_like(reset_buf), reset)
+    # reset = torch.where(
+    #     (z_abs < 1.75) | (z_abs > 2.25), torch.ones_like(reset_buf), reset
+    # )  # limit the range and prevent orientation drift bug
     reset = torch.where(torch.abs(wz) > 70, torch.ones_like(reset_buf), reset)
     # reset = torch.where(torch.abs(wy) > 70, torch.ones_like(reset_buf), reset)
     # reset = torch.where(torch.abs(wx) > 70, torch.ones_like(reset_buf), reset)

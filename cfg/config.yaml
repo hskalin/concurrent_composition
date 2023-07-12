@@ -57,7 +57,7 @@ force_render: True
 
 # set default task and default training config based on task
 defaults:
-  - env: PointMass2D
+  - env: Pointer2D
   - agent: SAC
   - buffer: buffer
   - hydra/job_logging: disabled

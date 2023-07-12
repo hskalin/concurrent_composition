@@ -23,25 +23,34 @@ class MultiTaskEnv:
     def define_tasks(self, env_cfg, combination):
         def get_w(c, d, w):
             # feature order: [pos, pos_norm, vel, vel_norm, ang, angvel, success]
-            # w_pos = c[0] * (d * [w[0]] + (3 - d) * [0])
-            # w_pos_norm = c[1] * [w[0]]
-            # w_vel = c[2] * (d * [w[1]] + (3 - d) * [0])
-            # w_vel_norm = c[3] * [w[1]]
-            # w_ang = c[4] * (d * [w[2]] + (3 - d) * [0])
-            # w_angvel = c[5] * (d * [w[3]] + (3 - d) * [0])
-            # w_success = c[6] * [w[4]]
 
-            w_pos = c[0] * d * [w[0]]
-            w_pos_norm = c[1] * [w[0]]
-            w_vel = c[2] * d * [w[1]]
-            w_vel_norm = c[3] * [w[1]]
-            w_ang = c[4] * d * [w[2]]
-            w_angvel = c[5] * d * [w[3]]
-            w_success = c[6] * [w[4]]
+            if "pointmass" in env_cfg["env_name"].lower():
+                w_pos = c[0] * d * [w[0]]
+                w_pos_norm = c[1] * [w[0]]
+                w_vel = c[2] * d * [w[1]]
+                w_vel_norm = c[3] * [w[1]]
+                w_ang = c[4] * d * [w[2]]
+                w_angvel = c[5] * d * [w[3]]
+                w_success = c[6] * [w[4]]
+                return (
+                    w_pos
+                    + w_pos_norm
+                    + w_vel
+                    + w_vel_norm
+                    + w_ang
+                    + w_angvel
+                    + w_success
+                )
 
-            return (
-                w_pos + w_pos_norm + w_vel + w_vel_norm + w_ang + w_angvel + w_success
-            )
+            elif "pointer" in env_cfg["env_name"].lower():
+                w_pos_norm = c[0] * [w[0]]
+                w_vel_norm = c[1] * [w[1]]
+                w_ang_norm = c[2] * [w[2]]
+                w_angvel_norm = c[3] * [w[3]]
+                w_success = c[4] * [w[4]]
+                return w_pos_norm + w_vel_norm + w_ang_norm + w_angvel_norm + w_success
+            else:
+                raise NotImplementedError(f"env name {env_cfg['env_name']} invalid")
 
         dim = env_cfg["dim"]
 
