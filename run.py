@@ -30,8 +30,11 @@ def launch_rlg_hydra(cfg: DictConfig):
     torch.manual_seed(cfg_dict["seed"])
     np.random.seed(cfg_dict["seed"])
 
-    agent = CompositionAgent(cfg_dict)
-    # agent = SACAgent(cfg=cfg_dict)
+    if "sac" in cfg_dict["agent"]["name"].lower():
+        agent = SACAgent(cfg=cfg_dict)
+    else:
+        agent = CompositionAgent(cfg_dict)
+
     agent.run()
     wandb.finish()
 
