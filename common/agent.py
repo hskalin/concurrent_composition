@@ -174,11 +174,12 @@ class IsaacAgent:
             self.evaluate()
 
     def update_w(self, s, w, w_navi, w_hover, thr=3):
+        w = w.float()
         pos_index = self.env_cfg["feature"]["pos_index"]
         dim = self.env_cfg["dim"]
         dist = torch.linalg.norm(s[:, pos_index : pos_index + dim], axis=1)
-        w[torch.where(dist <= thr)[0], :] = w_hover
-        w[torch.where(dist > thr)[0], :] = w_navi
+        w[torch.where(dist <= thr)[0], :] = w_hover.float()
+        w[torch.where(dist > thr)[0], :] = w_navi.float()
 
     def is_update(self):
         return (

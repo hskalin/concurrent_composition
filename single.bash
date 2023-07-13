@@ -1,7 +1,5 @@
 #!/bin/bash
 
-wandb agent multi-task-rl/con_comp/jiyihx8z --count 25
-
-wandb agent multi-task-rl/con_comp/bnbcanok --count 25
-
-wandb agent multi-task-rl/con_comp/ac42q3yt --count 25
+wandb agent multi-task-rl/con_comp/4s6xce67
+wandb agent multi-task-rl/con_comp/dstef42y
+wandb agent multi-task-rl/con_comp/v1m8roem
