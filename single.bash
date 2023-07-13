@@ -1,13 +1,7 @@
 #!/bin/bash
 
-echo "DAC"
-wandb agent multi-task-rl/con_comp/loh5ufha
+wandb agent multi-task-rl/con_comp/jiyihx8z --count 25
 
-echo "DACGPI"
-wandb agent multi-task-rl/con_comp/jgiji2c8
+wandb agent multi-task-rl/con_comp/bnbcanok --count 25
 
-echo "MSF"
-wandb agent multi-task-rl/con_comp/xjhqxxmb
-
-echo "SFGPI"
-wandb agent multi-task-rl/con_comp/po3bxthl
+wandb agent multi-task-rl/con_comp/ac42q3yt --count 25

@@ -40,6 +40,6 @@ feature:
   
 sim:
   sim_device: "cuda:0"
-  headless: False
+  headless: True
   compute_device_id: 0
   graphics_device_id: 0
