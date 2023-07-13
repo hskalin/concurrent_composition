@@ -152,6 +152,7 @@ class IsaacAgent:
                     self.learn()
 
             s = s_next
+            self.w = self.w.float()
             self.update_w(s, self.w, self.w_navi, self.w_hover)
 
             self.steps += self.n_env
@@ -174,7 +175,6 @@ class IsaacAgent:
             self.evaluate()
 
     def update_w(self, s, w, w_navi, w_hover, thr=3):
-        w = w.float()
         pos_index = self.env_cfg["feature"]["pos_index"]
         dim = self.env_cfg["dim"]
         dist = torch.linalg.norm(s[:, pos_index : pos_index + dim], axis=1)
