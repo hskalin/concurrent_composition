@@ -2,7 +2,7 @@ program: run.py
 method: grid
 metric:
   goal: maximize
-  name: reward/eval
+  name: reward/train
 
 parameters:
   agent.lr:
