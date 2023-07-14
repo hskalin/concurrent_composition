@@ -236,6 +236,7 @@ class IsaacAgent:
                 r = self.calc_reward(s_next, self.w_eval)
 
                 s = s_next
+                self.w_eval = self.w_eval.float()
                 self.update_w(s, self.w_eval, self.w_eval_navi, self.w_eval_hover)
                 episode_r += r
 
