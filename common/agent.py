@@ -94,7 +94,14 @@ class IsaacAgent:
         self.updates_per_step = int(self.agent_cfg["updates_per_step"])
         self.reward_scale = int(self.agent_cfg["reward_scale"])
 
-        log_dir = self.agent_cfg["name"] + "/" + "pointmass" + "/" + exp_date + "/"
+        log_dir = (
+            self.agent_cfg["name"]
+            + "/"
+            + self.env_cfg["env_name"]
+            + "/"
+            + exp_date
+            + "/"
+        )
         self.log_path = self.env_cfg["log_path"] + log_dir
         if self.record:
             Path(self.log_path).mkdir(parents=True, exist_ok=True)
@@ -114,6 +121,7 @@ class IsaacAgent:
         self.games_to_track = 100
         self.game_rewards = AverageMeter(1, self.games_to_track).to("cuda:0")
         self.game_lengths = AverageMeter(1, self.games_to_track).to("cuda:0")
+        self.avgStepRew = AverageMeter(1, 20).to(self.device)
 
     def run(self):
         while True:
@@ -121,7 +129,7 @@ class IsaacAgent:
             if self.steps > self.total_timesteps:
                 break
 
-    def train_episode(self):
+    def train_episode(self, gui_app=None, gui_rew=None):
         self.episodes += 1
         episode_r = episode_steps = 0
         done = False
@@ -144,6 +152,14 @@ class IsaacAgent:
             self.env.reset()
 
             r = self.calc_reward(s_next, self.w)
+
+            # call gui update loop
+            if gui_app:
+                gui_app.update_idletasks()
+                gui_app.update()
+                self.avgStepRew.update(r)
+                gui_rew.set(self.avgStepRew.get_mean())
+
             masked_done = False if episode_steps >= self.episode_max_step else done
             self.save_to_buffer(s, a, r, s_next, done, masked_done)
 

@@ -104,6 +104,7 @@ class pointer_feature:
 
         pos = s[:, 3:5]
         pos_norm = torch.linalg.norm(pos, axis=1, keepdims=True)
+
         if self._pos_norm:
             features.append(-pos_norm)
 
