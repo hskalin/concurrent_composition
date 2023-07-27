@@ -12,12 +12,15 @@ parameters:
     min: 0.001
     max: 0.01
   buffer.mini_batch_size:
-    values: [2048, 4096]
+    values: [4096]
   env.num_envs:
     values: [1024]
+  env.single_task:
+    values: [False]
 
 command:
   - ${env}
   - python
   - ${program}
-  - agent=SFGPI
+  - agent=DAC
+  - env=PointMass2D

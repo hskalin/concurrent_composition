@@ -20,6 +20,11 @@ class SACAgent(IsaacAgent):
 
         self.lr = self.agent_cfg["lr"]
         self.policy_lr = self.agent_cfg["policy_lr"]
+
+        # bad fix
+        # self.lr = self.agent_cfg["lr"][0]
+        # self.policy_lr = self.agent_cfg["lr"][1]
+
         self.value_net_kwargs = self.agent_cfg["value_net_kwargs"]
         self.policy_net_kwargs = self.agent_cfg["policy_net_kwargs"]
         self.gamma = self.agent_cfg["gamma"]

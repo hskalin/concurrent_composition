@@ -12,10 +12,10 @@ updates_per_step: 1
 reward_scale: 1.0
 grad_clip: null
 value_net_kwargs: 
-    sizes: [64, 64]
+    sizes: [128, 128]
     activation: "relu"
     layernorm: True
     droprate: 0.0
 policy_net_kwargs: 
-    sizes: [32, 32]
+    sizes: [64, 64]
     layernorm: False

@@ -16,11 +16,11 @@ parameters:
   env.num_envs:
     values: [1024]
   env.single_task:
-    values: [True]
+    values: [False]
 
 command:
   - ${env}
   - python
   - ${program}
-  - agent=SAC
-  - env=Pointer2D
+  - agent=SFGPI
+  - env=PointMass2D

@@ -1,16 +1,22 @@
 program: run.py
-method: bayes
+method: grid
 metric:
   goal: maximize
-  name: reward/eval
+  name: reward/train
 
 parameters:
   agent.lr:
-    min: 0.001
-    max: 0.01
-  agent.policy_lr:
-    min: 0.001
-    max: 0.01
+    values: [[0.003241,0.003308], [0.005068,0.001684], [0.007488,0.006772], [0.001763,0.008323], [0.008269,0.007285]]
+  env.task.multi:
+    parameters:
+      w_nav:
+        values: [[1, 0, 0, 0.0, 0]]
+      w_hov:
+        values: [[0, 0.8, 0, 0.2, 0]]
+      w_eval_nav:
+        values: [[0.5, 0.01, 0.0, 0.0, 1]]
+      w_eval_hov:
+        values: [[0.5, 0, 0.5, 0.01, 1]]
   buffer.mini_batch_size:
     values: [4096]
   env.num_envs:

@@ -34,8 +34,6 @@ class Compositions:
         elif self.agent_name == "dacgpi":
             self.composition_fn = self.dacgpi
             self.record_impact = True
-        elif self.agent_name == "pickplace":
-            self.composition_fn = self.pickplace
         else:
             raise NotImplementedError
 
@@ -89,77 +87,6 @@ class Compositions:
         kappa = self.cpe(s, acts, w)
         a = self.gpi(acts, kappa, rule="k")
         return a
-
-    def pickplace(self, s, w, mode):  # only works for 2d simple env as baseline
-        if mode == "explore":
-            acts, _, _ = self.policy(s)  # [N, H, A]  <-- [N, S]
-        elif mode == "exploit":
-            _, _, acts = self.policy(s)  # [N, H, A]  <-- [N, S]
-
-        axx = acts[:, 0, 0].unsqueeze(1)  # [N,1] <-- [N, H, A]
-        ayy = acts[:, 1, 1].unsqueeze(1)  # [N,1] <-- [N, H, A]
-        return torch.cat([axx, ayy], 1)  # [N,2]
-
-    def sfgpi(self, s, w, mode):
-        if mode == "explore":
-            acts, _, _ = self.policy(s)  # [N, H, A]  <-- [N, S]
-        elif mode == "exploit":
-            _, _, acts = self.policy(s)  # [N, H, A]  <-- [N, S]
-
-        qs = self.gpe(s, acts, w)  # [N, H, H] <-- [N, S], [N, H, A], [N, F]
-        a = self.gpi(acts, qs)  # [N, A] <-- [N, H, A], [N, H, H]
-        return a
-
-    def msf(self, s, w, mode):
-        means, log_stds = self.policy.get_mean_std(s)  # [N, H, A]
-        composed_mean, composed_std = self.cpi(means, log_stds, w, rule="mcp")
-        if mode == "explore":
-            a = torch.tanh(Normal(composed_mean, composed_std).rsample())
-        elif mode == "exploit":
-            a = composed_mean
-        return a
-
-    def sfcpi(self, s, w, mode):
-        means, log_stds = self.policy.get_mean_std(s)  # [N, H, A]
-        # [N, Ha, Hsf] <-- [N, S], [N, H, A], [N, F]
-        qs = self.gpe(s, means, w)
-        qs = qs.mean(2)  # [N, H]
-        composed_mean, composed_std = self.cpi(means, log_stds, qs, rule="mcp")
-        if mode == "explore":
-            a = torch.tanh(Normal(composed_mean, composed_std).rsample())
-        elif mode == "exploit":
-            a = composed_mean
-        return a
-
-    def dac(self, s, w, mode):
-        means, log_stds = self.policy.get_mean_std(s)  # [N, H, A]
-        kappa = self.cpe(s, means, w)
-        composed_mean, composed_std = self.cpi(means, log_stds, kappa, rule="mca")
-        if mode == "explore":
-            a = torch.tanh(Normal(composed_mean, composed_std).rsample())
-        elif mode == "exploit":
-            a = composed_mean
-        return a
-
-    def dacgpi(self, s, w, mode):
-        if mode == "explore":
-            acts, _, _ = self.policy(s)  # [N, H, A]  <-- [N, S]
-        elif mode == "exploit":
-            _, _, acts = self.policy(s)  # [N, H, A]  <-- [N, S]
-
-        kappa = self.cpe(s, acts, w)
-        a = self.gpi(acts, kappa, rule="k")
-        return a
-
-    def pickplace(self, s, w, mode):  # only works for 2d simple env as baseline
-        if mode == "explore":
-            acts, _, _ = self.policy(s)  # [N, H, A]  <-- [N, S]
-        elif mode == "exploit":
-            _, _, acts = self.policy(s)  # [N, H, A]  <-- [N, S]
-
-        axx = acts[:, 0, 0].unsqueeze(1)  # [N,1] <-- [N, H, A]
-        ayy = acts[:, 1, 1].unsqueeze(1)  # [N,1] <-- [N, H, A]
-        return torch.cat([axx, ayy], 1)  # [N,2]
 
     def gpe(self, s, acts, w):
         # [N, Ha, Hsf, F] <-- [N, S], [N, Ha, A]

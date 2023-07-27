@@ -1,4 +1,3 @@
-import isaacgym
 from pathlib import Path
 
 import torch
@@ -15,7 +14,6 @@ from common.util import (
 from common.value_function import TwinnedMultiheadSFNetwork
 from common.compositions import Compositions
 from torch.optim import Adam
-import numpy as np
 
 
 class CompositionAgent(IsaacAgent):
@@ -24,6 +22,11 @@ class CompositionAgent(IsaacAgent):
 
         self.lr = self.agent_cfg["lr"]
         self.policy_lr = self.agent_cfg["policy_lr"]
+
+        # bad fix
+        # self.lr = self.agent_cfg["lr"][0]
+        # self.policy_lr = self.agent_cfg["lr"][1]
+
         self.value_net_kwargs = self.agent_cfg["value_net_kwargs"]
         self.policy_net_kwargs = self.agent_cfg["policy_net_kwargs"]
         self.gamma = self.agent_cfg["gamma"]
@@ -142,7 +145,7 @@ class CompositionAgent(IsaacAgent):
         batch = self.replay_buffer.sample(self.mini_batch_size)
         priority_weights = torch.ones((self.mini_batch_size, 1)).to(self.device)
 
-        sf_loss, errors, mean_sf1, mean_sf2, target_sf = self.update_sf(
+        sf_loss, errors, mean_sf1 = self.update_sf(
             batch, priority_weights
         )
         policy_loss, entropies = self.update_policy(batch, priority_weights)
@@ -164,9 +167,6 @@ class CompositionAgent(IsaacAgent):
                 "loss/SF": sf_loss,
                 "loss/policy": policy_loss,
                 "state/mean_SF1": mean_sf1,
-                "state/mean_SF2": mean_sf2,
-                "state/target_sf": target_sf.detach().mean().item(),
-                "state/lr": self.lr,
                 "state/entropy": entropies.detach().mean().item(),
                 "state/policy_idx": wandb.Histogram(self.comp.policy_idx),
             }
@@ -216,9 +216,8 @@ class CompositionAgent(IsaacAgent):
 
         # log means to monitor training.
         mean_sf1 = curr_sf1.detach().mean().item()
-        mean_sf2 = curr_sf2.detach().mean().item()
 
-        return sf_loss.detach().item(), errors, mean_sf1, mean_sf2, target_sf
+        return sf_loss.detach().item(), errors, mean_sf1
 
     def update_policy(self, batch, priority_weights):
         (s, f, a, r, s_next, dones) = batch
@@ -317,6 +316,7 @@ class CompositionAgent(IsaacAgent):
         self.policy.save(path + "policy")
         self.sf.SF1.save(path + "sf1")
         self.sf.SF2.save(path + "sf2")
+        print(f"save torch model in {path}")
 
     def load_torch_model(self, path):
         self.policy.load(path + "policy")
