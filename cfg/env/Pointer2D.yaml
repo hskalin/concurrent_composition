@@ -28,9 +28,9 @@ task:
     w_eval_hov: [0, 1, 0, 0, 10]
 
 goal:
-  goal_lim: [10, 3.1415926] # range for postiion, angle goal
-  rand_ang_goal: True # random angle target
-  vel_goal: [1, 0] # vx, vy in body frame
+  goal_lim: [10, 3, 1] # range for postiion, vel, angle [pi] goal
+  rand_rot_goal: True # random yaw angle target
+  rand_vel_goal: True # random vx target (body frame)
   reset_dist: 256 # max dist^2 to reset env
 
 feature:

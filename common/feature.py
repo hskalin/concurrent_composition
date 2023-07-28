@@ -93,7 +93,8 @@ class ptr_feature:
         if self._pos_norm:
             features.append(-pos_norm)
 
-        vel_norm = s[:, 7:8]
+        vel = s[:, 5:7]
+        vel_norm = torch.linalg.norm(vel, axis=1, keepdims=True)
         if self._vel_norm:
             features.append(-vel_norm)
 
@@ -101,7 +102,7 @@ class ptr_feature:
         if self._ang_norm:
             features.append(-torch.linalg.norm(ang, axis=1, keepdims=True))
 
-        angvel = s[:, 8:9]
+        angvel = s[:, 7:8]
         if self._angvel_norm:
             features.append(-torch.linalg.norm(angvel, axis=1, keepdims=True))
 

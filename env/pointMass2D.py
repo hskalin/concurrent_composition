@@ -198,7 +198,7 @@ class PointMass2D(VecEnv):
             )
             vel_goals[:, 2] = 0
         else:
-            vel_goals = torch.zeros([self.num_envs, 3], device=self.sim_device)
+            vel_goals = torch.zeros((len(env_ids), 3), device=self.sim_device)
 
         # set random pos, rot, vels
         self.rb_pos[env_ids, :] = positions[:]

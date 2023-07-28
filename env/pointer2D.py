@@ -5,7 +5,6 @@ from isaacgym.torch_utils import *
 from .base.vec_env import VecEnv
 
 from common.torch_jit_utils import *
-import sys
 
 import torch
 import math
@@ -17,12 +16,13 @@ class Pointer(VecEnv):
         self.num_obs = 10  # pole_angle + pole_vel + cart_vel + cart_pos
         self.num_act = 2  # force applied on the pole (-1 to 1)
         self.max_push_effort = 5.0  # the range of force applied to the pointer
-        self.ball_height = 2
+        self.init_hight = 2
 
         self.reset_dist = cfg["goal"]["reset_dist"]  # when to reset x^2+y^2
-        self.goal_lim = cfg["goal"]["goal_lim"] # list [position, velocity] range
-        self.rand_ang_goal = cfg["goal"]["rand_ang_goal"]
-        self.vel_goal = torch.tensor(cfg["goal"]["vel_goal"],device="cuda:0")
+        self.goal_lim = cfg["goal"]["goal_lim"] # list [position, velocity, angle] range
+        self.goal_lim[2] *= math.pi
+        self.rand_vel_goal = cfg["goal"]["rand_vel_goal"]
+        self.rand_rot_goal = cfg["goal"]["rand_rot_goal"]
 
         super().__init__(cfg=cfg)
 
@@ -32,13 +32,25 @@ class Pointer(VecEnv):
             * 2
             * self.goal_lim[0]
         )
-        self.goal_pos[..., 2] = self.ball_height
+        self.goal_pos[..., 2] = self.init_hight
 
-        if self.rand_ang_goal:
-            self.goal_rot = (
+        if self.rand_vel_goal:
+            self.goal_vel = (
                 (torch.rand((self.num_envs, 3), device=self.sim_device) - 0.5)
                 * 2
                 * self.goal_lim[1]
+            )
+            self.goal_vel[..., 1] = 0
+            self.goal_vel[..., 2] = 0
+        else:
+            self.goal_vel = torch.zeros((self.num_envs, 3), device=self.sim_device)
+            self.goal_vel[..., 0] = 2 # default velocity (2,0,0)
+
+        if self.rand_rot_goal:
+            self.goal_rot = (
+                (torch.rand((self.num_envs, 3), device=self.sim_device) - 0.5)
+                * 2
+                * self.goal_lim[2]
             )
             self.goal_rot[..., 0] = 0
             self.goal_rot[..., 1] = 0
@@ -56,7 +68,7 @@ class Pointer(VecEnv):
         self.rb_avels = self.rb_states[:, 10:13].view(self.num_envs, self.num_bodies, 3)
 
         # storing tensors for visualisations
-        self.actions_tensor = torch.zeros(
+        self.force_tensor = torch.zeros(
             (self.num_envs, self.num_bodies, 3),
             device=self.sim_device,
             dtype=torch.float,
@@ -97,7 +109,7 @@ class Pointer(VecEnv):
 
         # define pointer pose
         pose = gymapi.Transform()
-        pose.p.z = self.ball_height  # generate the pointer 1m from the ground
+        pose.p.z = self.init_hight  # generate the pointer 1m from the ground
         pose.r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
 
         # generate environments
@@ -165,12 +177,8 @@ class Pointer(VecEnv):
         xv, yv, zv = globalToLocalRot(
             roll, pitch, yaw, vel[env_ids, 0], vel[env_ids, 1], vel[env_ids, 2]
         )
-        self.obs_buf[env_ids, 5] = xv
-        self.obs_buf[env_ids, 6] = yv
-
-        # vel norm
-        vel_norm = torch.linalg.norm(vel[:, 0:2] - self.vel_goal, axis=1, keepdims=True)
-        self.obs_buf[env_ids, 7] = vel_norm.squeeze()
+        self.obs_buf[env_ids, 5] = xv - self.goal_vel[env_ids, 0]
+        self.obs_buf[env_ids, 6] = yv - self.goal_vel[env_ids, 1]
 
         # angular velocities
         ang_vel = self.rb_avels[env_ids, 0]
@@ -183,10 +191,10 @@ class Pointer(VecEnv):
             ang_vel[env_ids, 1],
             ang_vel[env_ids, 2],
         )
-        self.obs_buf[env_ids, 8] = zw
+        self.obs_buf[env_ids, 7] = zw
 
         # absolute Z
-        self.obs_buf[env_ids, 9] = self.rb_pos[env_ids, 0, 2]
+        self.obs_buf[env_ids, 8] = self.rb_pos[env_ids, 0, 2]
 
     def get_reward(self):
         # retrieve environment observations from buffer
@@ -233,7 +241,7 @@ class Pointer(VecEnv):
         positions = torch.zeros(
             (len(env_ids), self.num_bodies, 3), device=self.sim_device
         )
-        positions[:, :, 2] = self.ball_height
+        positions[:, :, 2] = self.init_hight
 
         velocities = 2 * (
             torch.rand((len(env_ids), self.num_bodies, 6), device=self.sim_device) - 0.5
@@ -252,7 +260,25 @@ class Pointer(VecEnv):
             * 2
             * self.goal_lim[0]
         )
-        pos_goals[:, 2] = self.ball_height
+        pos_goals[:, 2] = self.init_hight
+
+        if self.rand_vel_goal:
+            vel_goals = (
+                (torch.rand((len(env_ids), 3), device=self.sim_device) - 0.5)
+                * 2
+                * self.goal_lim[1]
+            )
+            vel_goals[..., 1] = 0
+            vel_goals[..., 2] = 0
+
+        if self.rand_rot_goal:
+            rot_goals = (
+                (torch.rand((len(env_ids), 3), device=self.sim_device) - 0.5)
+                * 2
+                * self.goal_lim[2]
+            )
+            rot_goals[..., 0] = 0
+            rot_goals[..., 1] = 0
 
         # set random pos, rot, vels
         self.rb_pos[env_ids, :] = positions[:]
@@ -265,6 +291,8 @@ class Pointer(VecEnv):
         self.rb_avels[env_ids, :] = velocities[..., 3:6]
 
         self.goal_pos[env_ids, :] = pos_goals[:]
+        self.goal_vel[env_ids, :] = vel_goals[:]
+        self.goal_rot[env_ids, :] = rot_goals[:]
 
         # selectively reset the environments
         env_ids_int32 = env_ids.to(dtype=torch.int32)
@@ -308,21 +336,21 @@ class Pointer(VecEnv):
         # )
         TK_Z = -Q * 0.003354 * torch.sign(self.obs_buf[:, 7]) * self.obs_buf[:, 7] ** 2
 
-        self.actions_tensor[:, 0, 0] = 0.5 * FK_X + actions[:, 0]
-        self.actions_tensor[:, 1, 0] = 0.5 * FK_X + actions[:, 0]
+        self.force_tensor[:, 0, 0] = 0.5 * FK_X + actions[:, 0]
+        self.force_tensor[:, 1, 0] = 0.5 * FK_X + actions[:, 0]
 
-        self.actions_tensor[:, 0, 1] = 0.5 * FK_Y
-        self.actions_tensor[:, 1, 1] = 0.5 * FK_Y
+        self.force_tensor[:, 0, 1] = 0.5 * FK_Y
+        self.force_tensor[:, 1, 1] = 0.5 * FK_Y
 
-        # self.actions_tensor[:, 0, 2] = 0.5 * FK_Z
-        # self.actions_tensor[:, 1, 2] = 0.5 * FK_Z
+        # self.force_tensor[:, 0, 2] = 0.5 * FK_Z
+        # self.force_tensor[:, 1, 2] = 0.5 * FK_Z
 
         # self.torques_tensor[:, 0, 0] = TK_X + actions[:, 1]
         # self.torques_tensor[:, 0, 1] = TK_Y + actions[:, 2]
         self.torques_tensor[:, 0, 2] = TK_Z + actions[:, 1]
 
         # unwrap tensors
-        forces = gymtorch.unwrap_tensor(self.actions_tensor)
+        forces = gymtorch.unwrap_tensor(self.force_tensor)
         torques = gymtorch.unwrap_tensor(self.torques_tensor)
 
         # apply actions
@@ -358,9 +386,9 @@ class Pointer(VecEnv):
             roll,
             pitch,
             yaw,
-            self.actions_tensor[:, 0, 0],
-            self.actions_tensor[:, 0, 1],
-            self.actions_tensor[:, 0, 2],
+            self.force_tensor[:, 0, 0],
+            self.force_tensor[:, 0, 1],
+            self.force_tensor[:, 0, 2],
         )
 
         line_vertices = []
