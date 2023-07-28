@@ -125,19 +125,20 @@ class PointMass2D(VecEnv):
         self.obs_buf[env_ids, 1] = pos[env_ids, 1]
 
         # relative vel
-        rel_vel = self.goal_vel[env_ids] - self.rb_lvels[env_ids, 0]
+        lvel = self.rb_lvels[env_ids, 0]
+        goal_lvel = self.goal_vel[env_ids]
 
+        rel_vel = goal_lvel - lvel
         self.obs_buf[env_ids, 2] = rel_vel[env_ids, 0]
         self.obs_buf[env_ids, 3] = rel_vel[env_ids, 1]
 
         # vel norm
-        goal_vel_norm = torch.linalg.norm(self.goal_vel[env_ids], axis=1, keepdims=False)
-        rob_vel_norm = torch.linalg.norm(self.rb_lvels[env_ids, 0], axis=1, keepdims=False)
-        vel_norm = goal_vel_norm - rob_vel_norm
-        self.obs_buf[env_ids, 4] = vel_norm
+        goal_vel_norm = torch.linalg.norm(goal_lvel, axis=1, keepdims=False)
+        rob_vel_norm = torch.linalg.norm(lvel, axis=1, keepdims=False)
+        rel_vel_norm = goal_vel_norm - rob_vel_norm
+        self.obs_buf[env_ids, 4] = rel_vel_norm
 
         # linear vel 
-        lvel = self.rb_lvels[env_ids, 0]
         self.obs_buf[env_ids, 5] = lvel[env_ids, 0]
         self.obs_buf[env_ids, 6] = lvel[env_ids, 1]
 
