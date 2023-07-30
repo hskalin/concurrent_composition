@@ -171,7 +171,7 @@ class Pointer(VecEnv):
         self.obs_buf[env_ids, 3] = xp
         self.obs_buf[env_ids, 4] = yp
 
-        # linear xyz vel
+        # relative xyz vel
         vel = self.rb_lvels[env_ids, 0]
 
         xv, yv, zv = globalToLocalRot(
