@@ -19,12 +19,12 @@ class SACAgent(IsaacAgent):
         super().__init__(cfg)
 
         try:
-            self.lr = self.agent_cfg["lr"]
-            self.policy_lr = self.agent_cfg["policy_lr"]
-        except:
-        # bad fix
             self.lr = self.agent_cfg["lr"][0]
             self.policy_lr = self.agent_cfg["lr"][1]
+        except:
+        # bad fix
+            self.lr = self.agent_cfg["lr"]
+            self.policy_lr = self.agent_cfg["policy_lr"]
 
         self.value_net_kwargs = self.agent_cfg["value_net_kwargs"]
         self.policy_net_kwargs = self.agent_cfg["policy_net_kwargs"]

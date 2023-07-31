@@ -8,9 +8,9 @@ parameters:
   seed:
     values: [4679,31991,15131,9221,7039,81953,6551,33191,76001,80923]
   agent.lr:
-    values: [0.005095] 
+    values: [0.009461] 
   agent.policy_lr:
-    values: [0.002024] 
+    values: [0.008288] 
   buffer.mini_batch_size:
     values: [4096]
   env.num_envs:
@@ -22,5 +22,5 @@ command:
   - ${env}
   - python
   - ${program}
-  - agent=SFGPI
+  - agent=DAC
   - env=Pointer2D
