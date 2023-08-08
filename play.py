@@ -14,6 +14,7 @@ import wandb
 
 from tkinter import *
 
+model_path = "/home/yutang/rl/logs/dacgpi/Pointer2D/2023-08-04-17-09-23/model100/"
 
 @hydra.main(config_name="config", config_path="./cfg")
 def launch_rlg_hydra(cfg: DictConfig):
@@ -26,7 +27,6 @@ def launch_rlg_hydra(cfg: DictConfig):
     update_dict(cfg_dict, wandb_dict)
 
     cfg_dict["buffer"]["n_env"] = cfg_dict["env"]["num_envs"]
-    # cfg_dict["env"]["episode_max_step"] = int(50 * (512 / cfg_dict["env"]["num_envs"]))
     print_dict(cfg_dict)
 
     torch.manual_seed(456)
@@ -37,66 +37,40 @@ def launch_rlg_hydra(cfg: DictConfig):
     else:
         agent = CompositionAgent(cfg_dict)
 
-    agent.load_torch_model(
-        "/home/nilaksh/rl/con_comp/logs/dacgpi/Pointer2D/2023-07-14-17-32-26/model100/"
-    )
-    # agent.load_torch_model(
-    #     "/home/nilaksh/rl/con_comp/logs/dacgpi/Pointer2D/2023-07-14-13-28-23/model100/"
-    # )
-    agent.env_max_steps = 1000
-    agent.eval_episodes = 1
-    agent.total_episodes = 20
+    agent.load_torch_model(model_path)
+    # agent.max_episode_length = 1000
+    # agent.eval_episodes = 10
 
-    # agent.w_eval_navi = torch.tensor([1, 0, 0, 0, 0], device="cuda:0")
-    # agent.w_eval_hover = torch.tensor([1, 0, 0.8, 0.2, 0], device="cuda:0")
-    # agent.w_eval_init = torch.tile(agent.w_eval_navi, (agent.n_env, 1))  # [N, F]
-    # agent.w_eval = agent.w_eval_init.clone().type(torch.float32)
-    # print("aaaaaaaaaaaaaaa")
-    # print(agent.w_eval)
-    # agent.evaluate()
-
-    agent.w_navi = torch.tensor([0, 0, 1, 0, 0], device="cuda:0", dtype=torch.float32)
-    agent.w_hover = torch.tensor([0, 0, 1, 0, 0], device="cuda:0", dtype=torch.float32)
-    agent.w_init = torch.tile(agent.w_navi, (agent.n_env, 1))  # [N, F]
-    agent.w = agent.w_init.clone().type(torch.float32)
-
-    # # print(agent.w)
-    # # print(agent.w_navi)
-    # # print(agent.w_hover)
-    # agent.run()
-
-    # state = agent.env.obs_buf[0]
-    # print("aaaaaaaaaaaaaaa")
-    # print(state)
-    # print(agent.env.trace)
+    # agent.env.rand_vel_goal = False
+    # agent.env.rand_rot_goal = False
 
     root = Tk()
     root.title("test")
     root.geometry("300x400")
 
-    def update_pos(val):
-        agent.w_navi[0] = float(val)
-        agent.w_hover[0] = float(val)
-        agent.w_init = torch.tile(agent.w_navi, (agent.n_env, 1))  # [N, F]
-        agent.w = agent.w_init.clone().type(torch.float32)
+    def update_pos(v):
+        agent.task.w_eval_nav[0] = float(v)
+        agent.task.w_eval_hov[0] = float(v)
+        agent.task._w_eval_init = torch.tile(agent.task.w_eval_nav, (agent.task.n_env, 1))  # [N, F]
+        agent.task.w_eval = agent.task._w_eval_init.clone()  # [N, F]
 
-    def update_ang(val):
-        agent.w_navi[2] = float(val)
-        agent.w_hover[2] = float(val)
-        agent.w_init = torch.tile(agent.w_navi, (agent.n_env, 1))  # [N, F]
-        agent.w = agent.w_init.clone().type(torch.float32)
+    def update_vel(v):
+        agent.task.w_eval_nav[1] = float(v)
+        agent.task.w_eval_hov[1] = float(v)
+        agent.task._w_eval_init = torch.tile(agent.task.w_eval_nav, (agent.task.n_env, 1))  # [N, F]
+        agent.task.w_eval = agent.task._w_eval_init.clone()  # [N, F]
 
-    def update_vel(val):
-        agent.w_navi[1] = float(val)
-        agent.w_hover[1] = float(val)
-        agent.w_init = torch.tile(agent.w_navi, (agent.n_env, 1))  # [N, F]
-        agent.w = agent.w_init.clone().type(torch.float32)
+    def update_ang(v):
+        agent.task.w_eval_nav[2] = float(v)
+        agent.task.w_eval_hov[2] = float(v)
+        agent.task._w_eval_init = torch.tile(agent.task.w_eval_nav, (agent.task.n_env, 1))  # [N, F]
+        agent.task.w_eval = agent.task._w_eval_init.clone()  # [N, F]
 
-    def update_suc(val):
-        agent.w_navi[4] = float(val)
-        agent.w_hover[4] = float(val)
-        agent.w_init = torch.tile(agent.w_navi, (agent.n_env, 1))  # [N, F]
-        agent.w = agent.w_init.clone().type(torch.float32)
+    def update_suc(v):
+        agent.task.w_eval_nav[4] = float(v)
+        agent.task.w_eval_hov[4] = float(v)
+        agent.task._w_eval_init = torch.tile(agent.task.w_eval_nav, (agent.task.n_env, 1))  # [N, F]
+        agent.task.w_eval = agent.task._w_eval_init.clone()  # [N, F]
 
     pos_slide = Scale(
         root,
@@ -155,7 +129,7 @@ def launch_rlg_hydra(cfg: DictConfig):
     # root.mainloop()
 
     while True:
-        agent.train_episode(root, rew)
+        agent.evaluate(root, rew)
         if agent.steps > agent.total_timesteps:
             break
 

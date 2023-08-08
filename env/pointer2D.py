@@ -270,6 +270,9 @@ class Pointer(VecEnv):
             )
             vel_goals[..., 1] = 0
             vel_goals[..., 2] = 0
+        else:
+            vel_goals = torch.zeros((self.num_envs, 3), device=self.sim_device)
+            vel_goals[..., 0] = 2 # default velocity (2,0,0)
 
         if self.rand_rot_goal:
             rot_goals = (
@@ -279,6 +282,8 @@ class Pointer(VecEnv):
             )
             rot_goals[..., 0] = 0
             rot_goals[..., 1] = 0
+        else:
+            rot_goals = torch.zeros((len(env_ids), 3), device=self.sim_device)
 
         # set random pos, rot, vels
         self.rb_pos[env_ids, :] = positions[:]

@@ -33,7 +33,9 @@ class IsaacAgent:
         self.max_episode_length = self.env_cfg["max_episode_length"]
         self.log_interval = self.env_cfg["log_interval"]
         self.total_episodes = int(self.env_cfg["total_episodes"])
-        self.total_timesteps = self.n_env * self.max_episode_length * self.total_episodes
+        self.total_timesteps = (
+            self.n_env * self.max_episode_length * self.total_episodes
+        )
 
         self.eval = self.env_cfg["eval"]
         self.eval_interval = self.env_cfg["eval_interval"]
@@ -86,6 +88,13 @@ class IsaacAgent:
     def run(self):
         while True:
             self.train_episode()
+
+            if self.eval and (self.episodes % self.eval_interval == 0):
+                self.evaluate()
+
+            if self.save_model and (self.episodes % self.log_interval == 0):
+                self.save_torch_model()
+
             if self.steps > self.total_timesteps:
                 break
 
@@ -105,7 +114,7 @@ class IsaacAgent:
             episodeLen = self.env.progress_buf.clone()
             s_next = self.env.obs_buf.clone()
 
-            self.env.reset() # refresh state buffer, reset env and sample new goal if terminate is true
+            self.env.reset()  # refresh state buffer, reset env and sample new goal if terminate is true
             r = self.calc_reward(s_next, self.task.w)
 
             masked_done = False if episode_steps >= self.max_episode_length else done
@@ -136,13 +145,9 @@ class IsaacAgent:
                 gui_app.update()
                 self.avgStepRew.update(r)
                 gui_rew.set(self.avgStepRew.get_mean())
-                
+
         wandb.log({"reward/train": self.game_rewards.get_mean()})
         wandb.log({"length/train": self.game_lengths.get_mean()})
-
-        if self.eval and (self.episodes % self.eval_interval == 0):
-            self.evaluate()
-
 
     def is_update(self):
         return (
@@ -150,7 +155,7 @@ class IsaacAgent:
             and self.steps >= self.min_n_experience
         )
 
-    def reset_env(self): # reset tasks
+    def reset_env(self):  # reset tasks
         # s = self.env.reset()
         s = self.env.obs_buf.clone()
         if s is None:
@@ -168,12 +173,14 @@ class IsaacAgent:
 
         self.replay_buffer.add(s, f, a, r, s_next, masked_done)
 
-    def evaluate(self):
+    def evaluate(self, gui_app=None, gui_rew=None):
         episodes = int(self.eval_episodes)
         if episodes == 0:
             return
 
-        print(f"===== evaluate at episode: {self.episodes} for {self.max_episode_length} steps ====")
+        print(
+            f"===== evaluate at episode: {self.episodes} for {self.max_episode_length} steps ===="
+        )
 
         returns = torch.zeros((episodes,), dtype=torch.float32)
         for i in range(episodes):
@@ -186,23 +193,27 @@ class IsaacAgent:
 
                 s_next = self.env.obs_buf.clone()
 
-                self.env.reset() # refresh state buffer, reset env and sample new goal if terminate is true
+                self.env.reset()  # refresh state buffer, reset env and sample new goal if terminate is true
                 r = self.calc_reward(s_next, self.task.w_eval)
 
                 s = s_next
                 episode_r += r
                 self.task.update_task(s, eval=True)
 
+                # call gui update loop
+                if gui_app:
+                    gui_app.update_idletasks()
+                    gui_app.update()
+                    self.avgStepRew.update(r)
+                    gui_rew.set(self.avgStepRew.get_mean())
+
             returns[i] = torch.mean(episode_r).item()
 
         print(f"===== finish evaluate ====")
         wandb.log({"reward/eval": torch.mean(returns).item()})
 
-        if self.save_model:
-            self.save_torch_model()
-
     def act(self, s, w, mode="explore"):
-        if (self.steps <= self.min_n_experience) and (mode=="explore"):
+        if (self.steps <= self.min_n_experience) and (mode == "explore"):
             a = 2 * torch.rand((self.n_env, self.env.num_act), device="cuda:0") - 1
         else:
             a = self.get_action(s, w, mode)
