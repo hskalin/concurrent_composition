@@ -57,6 +57,10 @@ class Pointer(VecEnv):
         else:
             self.goal_rot = torch.zeros((self.num_envs, 3), device=self.sim_device)
 
+        ####
+        self.goal_rot_w = torch.zeros((self.num_envs, 3), device=self.sim_device) 
+        self.goal_rot_w[..., 2] = 0.5
+
         # initialise envs and state tensors
         self.envs, self.num_bodies = self.create_envs()
 
@@ -191,7 +195,8 @@ class Pointer(VecEnv):
             ang_vel[env_ids, 1],
             ang_vel[env_ids, 2],
         )
-        self.obs_buf[env_ids, 7] = zw
+        # self.obs_buf[env_ids, 7] = zw
+        self.obs_buf[env_ids, 7] = zw - self.goal_rot_w[env_ids, 2] ####
 
         # absolute Z
         self.obs_buf[env_ids, 8] = self.rb_pos[env_ids, 0, 2]
