@@ -70,8 +70,6 @@ class CompositionAgent(IsaacAgent):
             **self.policy_net_kwargs,
         ).to(self.device)
 
-        # self.sf1_optimizer = Adam(self.sf.SF1.parameters(), lr=self.lr)
-        # self.sf2_optimizer = Adam(self.sf.SF2.parameters(), lr=self.lr)
         self.sf_optimizer = Adam(self.sf.parameters(), lr=self.lr, betas=[0.9, 0.999])
         self.policy_optimizer = Adam(
             self.policy.parameters(), lr=self.policy_lr, betas=[0.9, 0.999]
